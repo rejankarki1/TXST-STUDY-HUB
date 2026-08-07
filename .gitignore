@@ -1,0 +1,12 @@
+node_modules
+dist
+coverage
+.env
+.env.*
+!.env.example
+.DS_Store
+*.tsbuildinfo
+server/generated/prisma
+server/src/generated/prisma
+server/prisma/*.db
+server/prisma/*.db-journal

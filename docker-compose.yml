@@ -1,0 +1,17 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: txst-study-hub-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: txst_study_hub
+      POSTGRES_USER: txst_user
+      POSTGRES_PASSWORD: txst_password
+    ports:
+      - "5433:5432"
+    volumes:
+      - txst-study-hub-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  txst-study-hub-postgres-data:
+
