@@ -48,18 +48,19 @@ model Course {
 }
 
 model Post {
-  id        String     @id @default(uuid())
-  title     String
-  body      String
-  type      PostType   @default(QUESTION)
-  status    PostStatus @default(OPEN)
-  authorId  String
-  courseId  String
-  author    User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  course    Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  answers   Answer[]
-  createdAt DateTime   @default(now())
-  updatedAt DateTime   @updatedAt
+  id               String     @id @default(uuid())
+  title            String
+  body             String
+  type             PostType   @default(QUESTION)
+  status           PostStatus @default(OPEN)
+  acceptedAnswerId String?
+  authorId         String
+  courseId         String
+  author           User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  course           Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  answers          Answer[]
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
 }
 
 model Answer {

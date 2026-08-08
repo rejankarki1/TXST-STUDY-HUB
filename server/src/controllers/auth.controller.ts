@@ -223,7 +223,7 @@ export const refresh: RequestHandler = async (req, res, next) => {
     }
 
     if (storedToken.expiresAt <= new Date()) {
-      await prisma.refreshToken.delete({
+      await prisma.refreshToken.deleteMany({
         where: { id: storedToken.id },
       });
       clearRefreshTokenCookie(res);
@@ -239,7 +239,7 @@ export const refresh: RequestHandler = async (req, res, next) => {
     const newExpiresAt = new Date(Date.now() + refreshTokenMaxAgeMs);
 
     await prisma.$transaction([
-      prisma.refreshToken.delete({
+      prisma.refreshToken.deleteMany({
         where: { id: storedToken.id },
       }),
       prisma.refreshToken.create({

@@ -7,6 +7,8 @@ import { prisma } from "./config/prisma.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { notFoundHandler } from "./middleware/notFoundHandler.js";
 import authRoutes from "./routes/auth.routes.js";
+import coursesRoutes from "./routes/courses.routes.js";
+import questionsRoutes from "./routes/questions.routes.js";
 
 const app = express();
 
@@ -41,6 +43,8 @@ app.get("/api/db-health", async (_req, res, next) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/courses", coursesRoutes);
+app.use("/api/questions", questionsRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
