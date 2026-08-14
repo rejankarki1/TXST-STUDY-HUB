@@ -55,14 +55,62 @@ const courses = [
   },
 ];
 
+const departments = [
+  {
+    code: "CS",
+    name: "Computer Science",
+  },
+  {
+    code: "MATH",
+    name: "Mathematics",
+  },
+  {
+    code: "ENG",
+    name: "English",
+  },
+  {
+    code: "POSI",
+    name: "Political Science",
+  },
+];
+
+function getDepartmentCode(courseCode: string) {
+  return courseCode.split(" ")[0];
+}
+
 async function main() {
+  for (const department of departments) {
+    await prisma.department.upsert({
+      where: {
+        code: department.code,
+      },
+      update: department,
+      create: department,
+    });
+  }
+
   for (const course of courses) {
+    const department = await prisma.department.findUniqueOrThrow({
+      where: {
+        code: getDepartmentCode(course.code),
+      },
+      select: {
+        id: true,
+      },
+    });
+
     await prisma.course.upsert({
       where: {
         code: course.code,
       },
-      update: course,
-      create: course,
+      update: {
+        ...course,
+        departmentId: department.id,
+      },
+      create: {
+        ...course,
+        departmentId: department.id,
+      },
     });
   }
 

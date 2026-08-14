@@ -2,6 +2,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import axios from "axios";
 import { useCallback, useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
+import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { Link, useParams } from "react-router";
 
 import {
@@ -9,20 +10,19 @@ import {
   createAnswer,
   getQuestionById,
 } from "../api/questions.api.ts";
+import { Alert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "../hooks/useAuth.ts";
+import { formatDate } from "@/lib/format";
 import {
   answerFormSchema,
   type AnswerFormValues,
 } from "../schemas/question.schema.ts";
 import type { ApiErrorResponse } from "../types/auth.ts";
 import type { QuestionDetails } from "../types/question.ts";
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "medium",
-    timeStyle: "short",
-  }).format(new Date(value));
-}
 
 export function QuestionDetailsPage() {
   const { questionId } = useParams();
@@ -123,25 +123,26 @@ export function QuestionDetailsPage() {
 
   if (isLoading) {
     return (
-      <section className="rounded-lg border border-slate-200 bg-white p-6 text-slate-600 shadow-sm">
-        Loading question...
-      </section>
+      <Card>
+        <CardContent className="p-6 text-muted-foreground">
+          Loading question...
+        </CardContent>
+      </Card>
     );
   }
 
   if (errorMessage || !question) {
     return (
-      <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900">
-          {errorMessage ?? "Question not found"}
-        </h1>
-        <Link
-          to="/courses"
-          className="mt-6 inline-flex rounded-md bg-red-900 px-4 py-2 font-semibold text-white hover:bg-red-950"
-        >
-          Back to Courses
-        </Link>
-      </section>
+      <Card>
+        <CardContent className="p-6">
+          <h1 className="text-2xl font-bold text-foreground">
+            {errorMessage ?? "Question not found"}
+          </h1>
+          <Button asChild className="mt-6">
+            <Link to="/courses">Back to Courses</Link>
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -149,148 +150,162 @@ export function QuestionDetailsPage() {
   const isResolved = question.status === "RESOLVED";
 
   return (
-    <div className="space-y-6">
-      <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
+    <div className="mx-auto max-w-4xl space-y-6">
+      <section className="rounded-xl border border-neutral-200 bg-white p-6">
         <Link
           to={`/courses/${question.course.id}`}
-          className="text-sm font-medium text-red-900 hover:underline"
+          className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
         >
+          <ArrowLeft className="size-4" aria-hidden="true" />
           Back to {question.course.code}
         </Link>
 
         <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-slate-900">
+            <div className="mb-3 flex flex-wrap gap-2">
+              <Badge variant="outline" className="text-primary">
+                {question.course.code}
+              </Badge>
+              <Badge variant={isResolved ? "success" : "secondary"}>
+                {isResolved ? "Solved" : "Open"}
+              </Badge>
+            </div>
+            <h1 className="text-3xl font-bold tracking-tight text-foreground">
               {question.title}
             </h1>
-            <p className="mt-2 text-sm text-slate-600">
-              {question.course.code} • Asked by{" "}
+            <p className="mt-2 text-sm text-muted-foreground">
+              Asked by{" "}
               {question.author.name ?? question.author.email} •{" "}
               {formatDate(question.createdAt)}
             </p>
           </div>
-          <span
-            className={`w-fit rounded-full px-3 py-1 text-sm font-semibold ${
-              isResolved
-                ? "bg-green-100 text-green-800"
-                : "bg-slate-100 text-slate-700"
-            }`}
-          >
-            {isResolved ? "Solved" : "Open"}
-          </span>
         </div>
 
-        <p className="mt-6 whitespace-pre-wrap leading-7 text-slate-700">
+        <p className="mt-6 whitespace-pre-wrap leading-7 text-foreground">
           {question.body}
         </p>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-semibold text-slate-900">
-          {question.answers.length}{" "}
-          {question.answers.length === 1 ? "Answer" : "Answers"}
-        </h2>
-
-        {answerError ? (
-          <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-            {answerError}
-          </div>
-        ) : null}
-
-        <div className="mt-5 space-y-4">
-          {question.answers.length === 0 ? (
-            <p className="text-sm text-slate-600">No answers yet.</p>
+      <Card className="border-neutral-200 shadow-none">
+        <CardHeader>
+          <CardTitle>
+            {question.answers.length}{" "}
+            {question.answers.length === 1 ? "Answer" : "Answers"}
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {answerError ? (
+            <Alert variant="destructive" className="mb-4">
+              {answerError}
+            </Alert>
           ) : null}
 
-          {question.answers.map((answer) => {
-            const isAccepted = question.acceptedAnswerId === answer.id;
-            const canAccept =
-              isQuestionAuthor && !isResolved && question.answers.length > 0;
-
-            return (
-              <article
-                key={answer.id}
-                className={`rounded-lg border p-4 ${
-                  isAccepted
-                    ? "border-green-300 bg-green-50"
-                    : "border-slate-200 bg-white"
-                }`}
-              >
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <p className="text-sm text-slate-600">
-                    {answer.author.name ?? answer.author.email} •{" "}
-                    {formatDate(answer.createdAt)}
-                  </p>
-                  {isAccepted ? (
-                    <span className="w-fit rounded-full bg-green-100 px-3 py-1 text-sm font-semibold text-green-800">
-                      Accepted Answer
-                    </span>
-                  ) : null}
-                </div>
-
-                <p className="mt-3 whitespace-pre-wrap leading-7 text-slate-700">
-                  {answer.body}
-                </p>
-
-                {canAccept ? (
-                  <button
-                    type="button"
-                    onClick={() => void onAcceptAnswer(answer.id)}
-                    disabled={acceptingAnswerId === answer.id}
-                    className="mt-4 rounded-md border border-green-700 px-3 py-2 text-sm font-semibold text-green-800 hover:bg-green-50 disabled:cursor-not-allowed disabled:opacity-70"
-                  >
-                    {acceptingAnswerId === answer.id
-                      ? "Accepting..."
-                      : "Accept Answer"}
-                  </button>
-                ) : null}
-              </article>
-            );
-          })}
-        </div>
-      </section>
-
-      <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        <h2 className="text-xl font-semibold text-slate-900">Your Answer</h2>
-
-        {isAuthenticated ? (
-          <form
-            onSubmit={(event) => void handleSubmit(onSubmit)(event)}
-            className="mt-4"
-          >
-            <label htmlFor="body" className="text-sm font-medium text-slate-700">
-              Answer
-            </label>
-            <textarea
-              id="body"
-              rows={7}
-              {...register("body")}
-              className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-red-900 focus:ring-2 focus:ring-red-900/20"
-            />
-            {errors.body ? (
-              <p className="mt-1 text-sm text-red-700">{errors.body.message}</p>
+          <div className="space-y-4">
+            {question.answers.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No answers yet.</p>
             ) : null}
 
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="mt-4 rounded-md bg-red-900 px-4 py-2 font-semibold text-white hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-70"
+            {question.answers.map((answer) => {
+              const isAccepted = question.acceptedAnswerId === answer.id;
+              const canAccept =
+                isQuestionAuthor && !isResolved && question.answers.length > 0;
+
+              return (
+                <article
+                  key={answer.id}
+                  className={`rounded-lg border p-4 ${
+                    isAccepted
+                      ? "border-emerald-300 bg-emerald-50"
+                      : "border-border bg-card"
+                  }`}
+                >
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <p className="text-sm text-muted-foreground">
+                      {answer.author.name ?? answer.author.email} •{" "}
+                      {formatDate(answer.createdAt)}
+                    </p>
+                    {isAccepted ? (
+                      <Badge variant="success">
+                        <CheckCircle2 className="mr-1 size-3" aria-hidden="true" />
+                        Accepted Answer
+                      </Badge>
+                    ) : null}
+                  </div>
+
+                  <p className="mt-3 whitespace-pre-wrap leading-7 text-foreground">
+                    {answer.body}
+                  </p>
+
+                  {canAccept ? (
+                    <Button
+                      type="button"
+                      onClick={() => void onAcceptAnswer(answer.id)}
+                      disabled={acceptingAnswerId === answer.id}
+                      variant="success"
+                      size="sm"
+                      className="mt-4"
+                    >
+                      {acceptingAnswerId === answer.id
+                        ? "Accepting..."
+                        : "Accept Answer"}
+                    </Button>
+                  ) : null}
+                </article>
+              );
+            })}
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-neutral-200 shadow-none">
+        <CardHeader>
+          <CardTitle>Your Answer</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isAuthenticated ? (
+            <form
+              onSubmit={(event) => void handleSubmit(onSubmit)(event)}
+              className="mt-4"
             >
-              {isSubmitting ? "Posting..." : "Post Answer"}
-            </button>
-          </form>
-        ) : (
-          <p className="mt-3 text-slate-600">
-            <Link
-              to="/login"
-              className="font-medium text-red-900 hover:underline"
-            >
-              Log in
-            </Link>{" "}
-            to post an answer.
-          </p>
-        )}
-      </section>
+              <label
+                htmlFor="body"
+                className="text-sm font-semibold text-foreground"
+              >
+                Answer
+              </label>
+              <Textarea
+                id="body"
+                rows={7}
+                {...register("body")}
+                className="mt-1"
+              />
+              {errors.body ? (
+                <p className="mt-1 text-sm text-destructive">
+                  {errors.body.message}
+                </p>
+              ) : null}
+
+              <Button
+                type="submit"
+                disabled={isSubmitting}
+                className="mt-4 bg-primary hover:bg-primary/90"
+              >
+                {isSubmitting ? "Posting..." : "Post Answer"}
+              </Button>
+            </form>
+          ) : (
+            <p className="text-muted-foreground">
+              <Link
+                to="/login"
+                className="font-semibold text-primary hover:underline"
+              >
+                Log in
+              </Link>{" "}
+              to post an answer.
+            </p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

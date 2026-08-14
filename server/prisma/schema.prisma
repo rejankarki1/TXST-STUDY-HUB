@@ -16,12 +16,39 @@ enum UserRole {
 enum PostType {
   QUESTION
   NOTE
+  RESOURCE
 }
 
 enum PostStatus {
   OPEN
   RESOLVED
   ARCHIVED
+}
+
+enum ExperienceDifficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum ResourceType {
+  VIDEO
+  PRACTICE
+  DOCUMENTATION
+  GUIDE
+  TOOL
+  OFFICIAL
+}
+
+enum StudyGroupMode {
+  ONLINE
+  IN_PERSON
+}
+
+enum StudyGroupStatus {
+  OPEN
+  FULL
+  CANCELLED
 }
 
 model User {
@@ -32,19 +59,35 @@ model User {
   role          UserRole       @default(STUDENT)
   posts         Post[]
   answers       Answer[]
+  experiences   CourseExperience[]
+  createdStudyGroups StudyGroup[] @relation("StudyGroupCreator")
+  studyGroupMemberships StudyGroupMember[]
   refreshTokens RefreshToken[]
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 }
 
+model Department {
+  id        String   @id @default(uuid())
+  code      String   @unique
+  name      String
+  courses   Course[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Course {
-  id          String   @id @default(uuid())
-  code        String   @unique
-  title       String
-  description String?
-  posts       Post[]
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id           String      @id @default(uuid())
+  code         String      @unique
+  title        String
+  description  String?
+  departmentId String?
+  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  posts        Post[]
+  experiences  CourseExperience[]
+  studyGroups  StudyGroup[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
 }
 
 model Post {
@@ -59,6 +102,7 @@ model Post {
   author           User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
   course           Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
   answers          Answer[]
+  resource         Resource?
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
 }
@@ -72,6 +116,61 @@ model Answer {
   author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
+
+model CourseExperience {
+  id            String               @id @default(uuid())
+  title         String
+  body          String
+  difficulty    ExperienceDifficulty
+  professorName String?
+  term          String?
+  courseId      String
+  authorId      String
+  course        Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  author        User                 @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt     DateTime             @default(now())
+  updatedAt     DateTime             @updatedAt
+}
+
+model Resource {
+  id           String       @id @default(uuid())
+  url          String
+  resourceType ResourceType
+  postId       String       @unique
+  post         Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+}
+
+model StudyGroup {
+  id            String             @id @default(uuid())
+  title         String
+  description   String
+  startDateTime DateTime
+  mode          StudyGroupMode
+  location      String?
+  onlineDetails String?
+  maxMembers    Int
+  status        StudyGroupStatus   @default(OPEN)
+  courseId      String
+  creatorId     String
+  course        Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  creator       User               @relation("StudyGroupCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  members       StudyGroupMember[]
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+}
+
+model StudyGroupMember {
+  id           String     @id @default(uuid())
+  studyGroupId String
+  userId       String
+  joinedAt     DateTime   @default(now())
+  studyGroup   StudyGroup @relation(fields: [studyGroupId], references: [id], onDelete: Cascade)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([studyGroupId, userId])
 }
 
 model RefreshToken {

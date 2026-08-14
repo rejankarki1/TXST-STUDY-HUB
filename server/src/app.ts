@@ -8,7 +8,12 @@ import { errorHandler } from "./middleware/errorHandler.js";
 import { notFoundHandler } from "./middleware/notFoundHandler.js";
 import authRoutes from "./routes/auth.routes.js";
 import coursesRoutes from "./routes/courses.routes.js";
+import departmentsRoutes from "./routes/departments.routes.js";
+import experiencesRoutes from "./routes/experiences.routes.js";
+import homeRoutes from "./routes/home.routes.js";
 import questionsRoutes from "./routes/questions.routes.js";
+import resourcesRoutes from "./routes/resources.routes.js";
+import studyGroupsRoutes from "./routes/study-groups.routes.js";
 
 const app = express();
 
@@ -43,8 +48,13 @@ app.get("/api/db-health", async (_req, res, next) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/home", homeRoutes);
+app.use("/api/departments", departmentsRoutes);
 app.use("/api/courses", coursesRoutes);
+app.use("/api/experiences", experiencesRoutes);
 app.use("/api/questions", questionsRoutes);
+app.use("/api/resources", resourcesRoutes);
+app.use("/api/study-groups", studyGroupsRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

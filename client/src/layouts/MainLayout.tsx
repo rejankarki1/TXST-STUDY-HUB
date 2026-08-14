@@ -1,15 +1,17 @@
 import { Outlet } from "react-router";
 
-import { Navbar } from "../components/common/Navbar.tsx";
+import { AppFooter } from "@/components/layout/AppFooter";
+import { AppHeader } from "@/components/layout/AppHeader";
+import { PageContainer } from "@/components/layout/PageContainer";
 
 export function MainLayout() {
   return (
-    <div className="min-h-screen bg-slate-50">
-      <Navbar />
-      <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
+    <div className="flex min-h-screen flex-col bg-neutral-50 text-neutral-950">
+      <AppHeader />
+      <PageContainer>
         <Outlet />
-      </main>
+      </PageContainer>
+      <AppFooter />
     </div>
   );
 }
-

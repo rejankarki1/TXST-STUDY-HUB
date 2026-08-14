@@ -1,9 +1,15 @@
 import { zodResolver } from "@hookform/resolvers/zod";
 import axios from "axios";
+import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { Link, useNavigate, useParams } from "react-router";
 
+import { Alert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { getCourseById } from "../api/courses.api.ts";
 import { createCourseQuestion } from "../api/questions.api.ts";
 import {
@@ -57,7 +63,9 @@ export function AskQuestionPage() {
         }
 
         if (axios.isAxiosError<ApiErrorResponse>(error)) {
-          setCourseError(error.response?.data.message ?? "Unable to load course.");
+          setCourseError(
+            error.response?.data.message ?? "Unable to load course.",
+          );
           return;
         }
 
@@ -88,7 +96,9 @@ export function AskQuestionPage() {
       navigate(`/questions/${response.data.question.id}`);
     } catch (error) {
       if (axios.isAxiosError<ApiErrorResponse>(error)) {
-        setServerError(error.response?.data.message ?? "Unable to create question.");
+        setServerError(
+          error.response?.data.message ?? "Unable to create question.",
+        );
         return;
       }
 
@@ -98,97 +108,112 @@ export function AskQuestionPage() {
 
   if (isCourseLoading) {
     return (
-      <section className="rounded-lg border border-slate-200 bg-white p-6 text-slate-600 shadow-sm">
-        Loading course...
-      </section>
+      <Card>
+        <CardContent className="p-6 text-muted-foreground">
+          Loading course...
+        </CardContent>
+      </Card>
     );
   }
 
   if (courseError || !course) {
     return (
-      <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-bold text-slate-900">
-          {courseError ?? "Course not found"}
-        </h1>
-        <Link
-          to="/courses"
-          className="mt-6 inline-flex rounded-md bg-red-900 px-4 py-2 font-semibold text-white hover:bg-red-950"
-        >
-          Back to Courses
-        </Link>
-      </section>
+      <Card>
+        <CardContent className="p-6">
+          <h1 className="text-2xl font-bold text-foreground">
+            {courseError ?? "Course not found"}
+          </h1>
+          <Button asChild className="mt-6">
+            <Link to="/courses">Back to Courses</Link>
+          </Button>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
-    <form
-      onSubmit={(event) => void handleSubmit(onSubmit)(event)}
-      className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm"
-    >
-      <Link
-        to={`/courses/${course.id}`}
-        className="text-sm font-medium text-red-900 hover:underline"
-      >
-        Back to {course.code}
-      </Link>
-
-      <h1 className="mt-4 text-2xl font-bold text-slate-900">
-        Ask a Question
-      </h1>
-      <p className="mt-2 text-slate-600">
-        Your question will be posted in {course.code}: {course.title}.
-      </p>
-
-      {serverError ? (
-        <div className="mt-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
-          {serverError}
-        </div>
-      ) : null}
-
-      <div className="mt-6 space-y-5">
-        <div>
-          <label htmlFor="title" className="text-sm font-medium text-slate-700">
-            Title
-          </label>
-          <input
-            id="title"
-            type="text"
-            {...register("title")}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-red-900 focus:ring-2 focus:ring-red-900/20"
-          />
-          {errors.title ? (
-            <p className="mt-1 text-sm text-red-700">{errors.title.message}</p>
-          ) : null}
-        </div>
-
-        <div>
-          <label
-            htmlFor="description"
-            className="text-sm font-medium text-slate-700"
+    <Card className="mx-auto max-w-3xl border-neutral-200 shadow-none">
+      <CardContent className="p-5 sm:p-6">
+        <form onSubmit={(event) => void handleSubmit(onSubmit)(event)}>
+          <Link
+            to={`/courses/${course.id}`}
+            className="inline-flex items-center gap-2 text-sm font-semibold text-primary hover:underline"
           >
-            Description
-          </label>
-          <textarea
-            id="description"
-            rows={8}
-            {...register("description")}
-            className="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 outline-none focus:border-red-900 focus:ring-2 focus:ring-red-900/20"
-          />
-          {errors.description ? (
-            <p className="mt-1 text-sm text-red-700">
-              {errors.description.message}
-            </p>
-          ) : null}
-        </div>
-      </div>
+            <ArrowLeft className="size-4" aria-hidden="true" />
+            Back to {course.code}
+          </Link>
 
-      <button
-        type="submit"
-        disabled={isSubmitting}
-        className="mt-6 rounded-md bg-red-900 px-4 py-2 font-semibold text-white hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-70"
-      >
-        {isSubmitting ? "Posting..." : "Post Question"}
-      </button>
-    </form>
+          <h1 className="mt-4 text-3xl font-bold tracking-tight text-foreground">
+            Ask a Question
+          </h1>
+          <p className="mt-1 text-base font-semibold text-muted-foreground">
+            {course.title}
+          </p>
+
+          {serverError ? (
+            <Alert variant="destructive" className="mt-4">
+              {serverError}
+            </Alert>
+          ) : null}
+
+          <div className="mt-5 space-y-4">
+            <div>
+              <label
+                htmlFor="title"
+                className="text-sm font-semibold text-foreground"
+              >
+                Title
+              </label>
+              <Input
+                id="title"
+                type="text"
+                {...register("title")}
+                className="mt-1"
+                placeholder="What do you want to ask?"
+              />
+              {errors.title ? (
+                <p className="mt-1 text-sm text-destructive">
+                  {errors.title.message}
+                </p>
+              ) : null}
+            </div>
+
+            <div>
+              <label
+                htmlFor="description"
+                className="text-sm font-semibold text-foreground"
+              >
+                Description
+              </label>
+              <Textarea
+                id="description"
+                rows={5}
+                {...register("description")}
+                className="mt-1"
+                placeholder="Add context, what you've tried, or what you're confused about..."
+              />
+              {errors.description ? (
+                <p className="mt-1 text-sm text-destructive">
+                  {errors.description.message}
+                </p>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button asChild type="button" variant="outline">
+              <Link to={`/courses/${course.id}`}>Cancel</Link>
+            </Button>
+            <Button
+              type="submit"
+              disabled={isSubmitting}
+              className="bg-primary hover:bg-primary/90"
+            >
+              {isSubmitting ? "Posting..." : "Post Question"}
+            </Button>
+          </div>
+        </form>
+      </CardContent>
+    </Card>
   );
 }

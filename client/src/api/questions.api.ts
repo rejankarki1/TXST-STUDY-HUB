@@ -47,7 +47,7 @@ export async function createAnswer(
 }
 
 export async function acceptAnswer(questionId: string, answerId: string) {
-  const response = await api.post<AcceptAnswerResponse>(
+  const response = await api.patch<AcceptAnswerResponse>(
     `/questions/${questionId}/answers/${answerId}/accept`,
   );
 
