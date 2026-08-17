@@ -1,71 +1,216 @@
-@import "tailwindcss";
-@import "tw-animate-css";
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
 
-@custom-variant dark (&:is(.dark *));
+/* ==========================================================================
+   TXST Study — design tokens
+   This file is the single source of truth for the product's visual language.
+   Screens should never invent a colour, radius or shadow outside this system.
+   ========================================================================== */
 
 :root {
-  --background: oklch(0.985 0.006 95);
-  --foreground: oklch(0.22 0.025 255);
-  --card: oklch(1 0 0);
-  --card-foreground: var(--foreground);
-  --popover: oklch(1 0 0);
-  --popover-foreground: var(--foreground);
-  --primary: oklch(0.32 0.115 25);
-  --primary-foreground: oklch(0.99 0.005 95);
-  --secondary: oklch(0.95 0.012 255);
-  --secondary-foreground: oklch(0.26 0.03 255);
-  --muted: oklch(0.95 0.012 255);
-  --muted-foreground: oklch(0.47 0.025 255);
-  --accent: oklch(0.94 0.02 35);
-  --accent-foreground: oklch(0.27 0.075 25);
-  --destructive: oklch(0.56 0.19 25);
-  --border: oklch(0.89 0.014 255);
-  --input: oklch(0.89 0.014 255);
-  --ring: oklch(0.38 0.12 25);
+  /* Ground & surfaces --------------------------------------------------- */
+  --background: #faf9f7; /* warm neutral page ground */
+  --surface: #ffffff; /* raised content */
+  --surface-sunken: #f3f1ee; /* wells, inactive tabs, skeletons */
+
+  /* Ink ----------------------------------------------------------------- */
+  --foreground: #1c1a19; /* charcoal */
+  --foreground-soft: #443f3b; /* secondary body copy */
+  --muted-foreground: #6f6963; /* metadata, labels */
+  --faint-foreground: #948d86; /* timestamps, placeholder */
+
+  /* Lines --------------------------------------------------------------- */
+  --border: #e7e3de; /* the primary separation device */
+  --border-strong: #d8d2cb; /* inputs, pressed edges */
+
+  /* Maroon — used sparingly: primary buttons, active nav, selected states */
+  --primary: #7b1e28;
+  --primary-hover: #661820;
+  --primary-foreground: #ffffff;
+  --primary-subtle: #f7efef;
+  --primary-subtle-hover: #f2e6e6;
+  --primary-border: #e8d5d6;
+
+  /* Status -------------------------------------------------------------- */
+  --success: #2e7d5b;
+  --success-subtle: #eaf4ef;
+  --warning: #b7791f;
+  --warning-subtle: #fbf3e6;
+  --danger: #b42318;
+  --danger-subtle: #fdf0ee;
+
+  /* Shape --------------------------------------------------------------- */
   --radius: 0.5rem;
 }
 
 @theme inline {
   --color-background: var(--background);
+  --color-surface: var(--surface);
+  --color-surface-sunken: var(--surface-sunken);
+
   --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
+  --color-foreground-soft: var(--foreground-soft);
   --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
+  --color-faint-foreground: var(--faint-foreground);
+
   --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --color-border-strong: var(--border-strong);
+  --color-ring: var(--primary);
+
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-primary-subtle-hover: var(--primary-subtle-hover);
+  --color-primary-border: var(--primary-border);
+
+  --color-success: var(--success);
+  --color-success-subtle: var(--success-subtle);
+  --color-warning: var(--warning);
+  --color-warning-subtle: var(--warning-subtle);
+  --color-danger: var(--danger);
+  --color-danger-subtle: var(--danger-subtle);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 4px);
+
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* One shadow. Separation comes from borders and whitespace. */
+  --shadow-xs: 0 1px 2px 0 rgb(28 26 25 / 0.05);
+  --shadow-sm: 0 1px 3px 0 rgb(28 26 25 / 0.07), 0 1px 2px -1px rgb(28 26 25 / 0.05);
+  --shadow-md: 0 4px 14px -2px rgb(28 26 25 / 0.1), 0 2px 6px -3px rgb(28 26 25 / 0.06);
+
+  --animate-fade-in: fade-in 0.16s ease-out;
+  --animate-rise: rise 0.2s cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-pop: pop 0.18s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-* {
-  box-sizing: border-box;
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
-body {
-  margin: 0;
-  min-width: 320px;
-  min-height: 100vh;
-  background: var(--background);
-  color: var(--foreground);
-  font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
-a {
-  color: inherit;
-  text-decoration: none;
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  /* Visible, consistent keyboard focus everywhere. */
+  :focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  ::selection {
+    background-color: var(--primary-subtle);
+    color: var(--primary);
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    text-wrap: balance;
+  }
+}
+
+@layer utilities {
+  /* Course codes, section eyebrows: small, wide, quiet. */
+  .text-eyebrow {
+    font-size: 0.6875rem;
+    line-height: 1rem;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  /* Horizontal chip rails that scroll without a visible bar. */
+  .no-scrollbar {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Message list / rails: thin, unobtrusive, only on hover-capable devices. */
+  .scroll-slim {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  .scroll-slim::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scroll-slim::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  .scroll-slim::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Long chat messages must never blow out the column. */
+  .break-message {
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

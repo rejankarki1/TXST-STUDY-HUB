@@ -1,138 +1,79 @@
 # TXST Study Hub
 
-TXST Study Hub is a full-stack study collaboration app for Texas State students to find courses, ask questions, share answers, and organize study content around specific classes.
+TXST Study Hub is a full-stack study collaboration app for Texas State students. The current client is a redesigned React/Vite study group experience for finding classmates, joining study groups, scheduling sessions, chatting, and managing RSVPs.
+
+## Current Status
+
+- Existing repository history is preserved in this repo.
+- Frontend: redesigned React, TypeScript, Vite, Tailwind CSS app under client/.
+- Frontend data is currently mock/in-memory state while backend integration is planned.
+- Backend: existing Node.js, Express, TypeScript, Prisma, PostgreSQL API remains under server/.
+- Backend implementation for the redesigned group/session/chat UI is intentionally paused for the next planning phase.
+
+## Frontend Features
+
+- Landing, signup, login, onboarding, and demo entry flow
+- Home dashboard
+- Discover groups
+- My groups
+- Course pages
+- Group overview, chat, sessions, and members tabs
+- Create group
+- Create session
+- RSVP controls
+- Mock chat replies and typing state
+- Notifications UI
+- Profile and sign out
+- Responsive desktop sidebar and mobile navigation
 
 ## Stack
 
-- Frontend: React, TypeScript, Vite, React Router, Tailwind CSS, Axios, React Hook Form, Zod
+- Frontend: React, TypeScript, Vite, React Router DOM, Tailwind CSS, Radix UI, Lucide React, Sonner
 - Backend: Node.js, Express, TypeScript, Prisma 7, PostgreSQL
-- Auth: JWT access tokens, HTTP-only refresh cookies, bcrypt password hashing
+- Existing auth backend: JWT access tokens, HTTP-only refresh cookies, bcrypt password hashing
 - Local database: PostgreSQL 16 with Docker Compose
-
-## What Works So Far
-
-- Local PostgreSQL database through Docker Compose
-- Prisma schema, migrations, and course seed data
-- Backend signup, login, refresh, logout, and protected `/api/auth/me`
-- Frontend signup/login/logout flow with session restore
-- Protected profile page
-- Course browsing and search
-- Course Hub pages
-- Q&A v1:
-  - list course questions
-  - ask a question
-  - view question details
-  - submit answers
-  - question author can accept an answer
-  - accepted answers mark questions as solved
 
 ## Local Setup
 
-Start PostgreSQL:
+Start PostgreSQL if you are working on the backend:
 
-```bash
 docker compose up -d
-```
 
 Run the backend:
 
-```bash
 cd server
 npm install
 cp .env.example .env
 npx prisma migrate dev
 npm run seed
 npm run dev
-```
 
-Backend URL:
-
-```text
-http://localhost:5050/api
-```
+Backend URL: http://localhost:5050/api
 
 Run the frontend:
 
-```bash
 cd client
 npm install
-cp .env.example .env
 npm run dev
-```
 
-Frontend URL:
-
-```text
-http://localhost:5173
-```
+Frontend URL: http://localhost:5173
 
 ## Useful Commands
 
 Backend:
 
-```bash
 cd server
 npm run typecheck
 npm run seed
 npm run dev
-```
 
 Frontend:
 
-```bash
 cd client
 npm run typecheck
+npm run build
 npm run dev
-```
 
-## API Routes
+## Backend Planning Note
 
-Auth:
-
-- `POST /api/auth/signup`
-- `POST /api/auth/login`
-- `POST /api/auth/refresh`
-- `POST /api/auth/logout`
-- `GET /api/auth/me`
-
-Courses:
-
-- `GET /api/courses`
-- `GET /api/courses?search=CS`
-- `GET /api/courses/:id`
-- `GET /api/courses/:courseId/questions`
-- `POST /api/courses/:courseId/questions`
-
-Questions and answers:
-
-- `GET /api/questions/:questionId`
-- `POST /api/questions/:questionId/answers`
-- `POST /api/questions/:questionId/answers/:answerId/accept`
-
-## Frontend Routes
-
-- `/`
-- `/signup`
-- `/login`
-- `/profile`
-- `/courses`
-- `/courses/:id`
-- `/courses/:courseId/questions/new`
-- `/questions/:questionId`
-
-## Seeded Courses
-
-- `CS 1428` - Foundations of Computer Science I
-- `CS 2308` - Foundations of Computer Science II
-- `MATH 2471` - Calculus I
-- `MATH 2472` - Calculus II
-- `MATH 2358` - Discrete Mathematics
-- `ENG 1310` - College Writing I
-- `POSI 2310` - Principles of American Government
-
-## Notes
-
-- Real `.env` files are ignored by Git.
-- Voting is not built yet.
-- Course Experiences, Resources, Study Groups, and admin course CRUD are not built yet.
-- A larger frontend design pass is planned before moving to Course Experiences.
+The next backend phase should connect the redesigned frontend to real persistence using the existing Express + Prisma + PostgreSQL server instead of creating a separate project. The main data areas to plan are users/profile/onboarding, courses, groups, group memberships, sessions, RSVPs, messages, unread state, and notifications.
