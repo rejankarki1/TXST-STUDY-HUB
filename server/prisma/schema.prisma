@@ -40,31 +40,61 @@ enum ResourceType {
   OFFICIAL
 }
 
-enum StudyGroupMode {
-  ONLINE
-  IN_PERSON
+enum GroupPurpose {
+  EXAM_PREP
+  HOMEWORK
+  WEEKLY_STUDYING
+  PROJECT_WORK
+  GENERAL_STUDY
 }
 
-enum StudyGroupStatus {
-  OPEN
-  FULL
-  CANCELLED
+enum MeetingStyle {
+  IN_PERSON
+  ONLINE
+  FLEXIBLE
+}
+
+enum SessionMode {
+  IN_PERSON
+  ONLINE
+}
+
+enum SessionRsvpStatus {
+  GOING
+  MAYBE
+  CANT
+}
+
+enum NotificationKind {
+  SESSION
+  MESSAGE
+  REMINDER
+  MEMBER
 }
 
 model User {
-  id            String         @id @default(uuid())
-  email         String         @unique
-  name          String?
-  passwordHash  String
-  role          UserRole       @default(STUDENT)
-  posts         Post[]
-  answers       Answer[]
-  experiences   CourseExperience[]
-  createdStudyGroups StudyGroup[] @relation("StudyGroupCreator")
+  id                    String             @id @default(uuid())
+  email                 String             @unique
+  name                  String?
+  passwordHash          String
+  role                  UserRole           @default(STUDENT)
+  major                 String?
+  gradYear              Int?
+  onboardingCompleted   Boolean            @default(false)
+  posts                 Post[]
+  answers               Answer[]
+  experiences           CourseExperience[]
+  selectedCourses       UserCourse[]
+  createdStudyGroups    StudyGroup[]       @relation("StudyGroupCreator")
   studyGroupMemberships StudyGroupMember[]
-  refreshTokens RefreshToken[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  organizedSessions     StudySession[]     @relation("SessionOrganizer")
+  sessionRsvps          SessionRsvp[]
+  groupMessages         GroupMessage[]
+  notifications         Notification[]     @relation("NotificationRecipient")
+  actedNotifications    Notification[]     @relation("NotificationActor")
+  refreshTokens         RefreshToken[]
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
 }
 
 model Department {
@@ -77,17 +107,31 @@ model Department {
 }
 
 model Course {
-  id           String      @id @default(uuid())
-  code         String      @unique
+  id           String             @id @default(uuid())
+  code         String             @unique
   title        String
   description  String?
   departmentId String?
-  department   Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  department   Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   posts        Post[]
   experiences  CourseExperience[]
+  selectedBy   UserCourse[]
   studyGroups  StudyGroup[]
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+}
+
+model UserCourse {
+  id        String   @id @default(uuid())
+  userId    String
+  courseId  String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([userId])
+  @@index([courseId])
 }
 
 model Post {
@@ -145,21 +189,24 @@ model Resource {
 
 model StudyGroup {
   id            String             @id @default(uuid())
-  title         String
+  name          String
   description   String
-  startDateTime DateTime
-  mode          StudyGroupMode
-  location      String?
-  onlineDetails String?
+  purpose       GroupPurpose       @default(GENERAL_STUDY)
+  meetingStyle  MeetingStyle       @default(FLEXIBLE)
   maxMembers    Int
-  status        StudyGroupStatus   @default(OPEN)
   courseId      String
   creatorId     String
   course        Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
   creator       User               @relation("StudyGroupCreator", fields: [creatorId], references: [id], onDelete: Cascade)
   members       StudyGroupMember[]
+  sessions      StudySession[]
+  messages      GroupMessage[]
+  notifications Notification[]
   createdAt     DateTime           @default(now())
   updatedAt     DateTime           @updatedAt
+
+  @@index([courseId])
+  @@index([creatorId])
 }
 
 model StudyGroupMember {
@@ -167,10 +214,80 @@ model StudyGroupMember {
   studyGroupId String
   userId       String
   joinedAt     DateTime   @default(now())
+  lastReadAt   DateTime?
   studyGroup   StudyGroup @relation(fields: [studyGroupId], references: [id], onDelete: Cascade)
   user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([studyGroupId, userId])
+  @@index([userId])
+}
+
+model StudySession {
+  id             String         @id @default(uuid())
+  groupId        String
+  organizerId    String
+  title          String
+  description    String
+  startsAt       DateTime
+  endsAt         DateTime
+  mode           SessionMode
+  location       String
+  locationDetail String?
+  meetingLink    String?
+  group          StudyGroup     @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  organizer      User           @relation("SessionOrganizer", fields: [organizerId], references: [id], onDelete: Cascade)
+  rsvps          SessionRsvp[]
+  notifications  Notification[]
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([groupId])
+  @@index([startsAt])
+}
+
+model SessionRsvp {
+  id        String            @id @default(uuid())
+  sessionId String
+  userId    String
+  status    SessionRsvpStatus
+  session   StudySession      @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  @@unique([sessionId, userId])
+  @@index([userId])
+}
+
+model GroupMessage {
+  id        String     @id @default(uuid())
+  groupId   String
+  authorId  String
+  body      String
+  group     StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  author    User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now())
+
+  @@index([groupId, createdAt])
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String
+  kind      NotificationKind
+  actorId   String?
+  groupId   String?
+  sessionId String?
+  text      String
+  readAt    DateTime?
+  createdAt DateTime         @default(now())
+  user      User             @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
+  actor     User?            @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
+  group     StudyGroup?      @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  session   StudySession?    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, readAt])
 }
 
 model RefreshToken {
