@@ -15,6 +15,7 @@ export function AppShell() {
   const location = useLocation()
   const inChat = Boolean(useMatch('/groups/:id/chat'))
 
+  if (state.authLoading) return null
   if (!state.signedIn) return <Navigate to="/" replace />
   if (!state.onboarded) return <Navigate to="/onboarding" replace />
 

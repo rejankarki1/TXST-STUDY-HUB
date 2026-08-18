@@ -30,25 +30,31 @@ export default function CreateSession() {
   const [location, setLocation] = React.useState<string>(CAMPUS_LOCATIONS[0])
   const [locationDetail, setLocationDetail] = React.useState('')
   const [meetingLink, setMeetingLink] = React.useState('')
+  const [submitting, setSubmitting] = React.useState(false)
 
   if (!group) return <Navigate to="/my-groups" replace />
   if (!isMember(group)) return <Navigate to={`/groups/${group.id}`} replace />
 
-  const submit = (event: React.FormEvent) => {
+  const submit = async (event: React.FormEvent) => {
     event.preventDefault()
-    const id = createSession({
-      groupId: group.id,
-      title: title.trim() || `${group.courseCode} study session`,
-      description:
-        description.trim() || 'Bring questions, notes, and the problems you want to review.',
-      startsAt: new Date(startsAt).toISOString(),
-      durationMinutes,
-      mode,
-      location: mode === 'online' ? 'Zoom' : location,
-      locationDetail: mode === 'online' ? undefined : locationDetail.trim() || undefined,
-      meetingLink: mode === 'online' ? meetingLink.trim() || 'https://txstate.zoom.us/' : undefined,
-    })
-    navigate(`/sessions/${id}`)
+    setSubmitting(true)
+    try {
+      const id = await createSession({
+        groupId: group.id,
+        title: title.trim() || `${group.courseCode} study session`,
+        description:
+          description.trim() || 'Bring questions, notes, and the problems you want to review.',
+        startsAt: new Date(startsAt).toISOString(),
+        durationMinutes,
+        mode,
+        location: mode === 'online' ? 'Zoom' : location,
+        locationDetail: mode === 'online' ? undefined : locationDetail.trim() || undefined,
+        meetingLink: mode === 'online' ? meetingLink.trim() || 'https://txstate.zoom.us/' : undefined,
+      })
+      navigate(`/sessions/${id}`)
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -155,9 +161,9 @@ export default function CreateSession() {
         )}
 
         <div className="flex justify-end">
-          <Button type="submit" variant="primary">
+          <Button type="submit" variant="primary" disabled={submitting}>
             <CalendarPlus />
-            Schedule session
+            {submitting ? 'Scheduling...' : 'Schedule session'}
           </Button>
         </div>
       </form>

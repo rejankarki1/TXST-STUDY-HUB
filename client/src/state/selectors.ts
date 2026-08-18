@@ -1,29 +1,62 @@
 import * as React from 'react'
-import type { Group, Person, RsvpStatus, Session } from '@/data/types'
+import type { Group, GroupMember, RsvpStatus, Session } from '@/data/types'
 import { peopleById, VIEWER_ID } from '@/data/people'
 import { useApp } from './AppState'
 
 /* ------------------------------------------------------------- pure bits */
 
-export const isMember = (group: Group) => group.memberIds.includes(VIEWER_ID)
-export const isFull = (group: Group) => group.memberIds.length >= group.maxMembers
-export const spotsLeft = (group: Group) => group.maxMembers - group.memberIds.length
+export const isMember = (group: Group) =>
+  group.isMember ?? group.members?.some((member) => member.id === VIEWER_ID) ?? false
+export const isFull = (group: Group) =>
+  group.isFull ?? (group.memberCount ?? group.members?.length ?? 0) >= group.maxMembers
+export const spotsLeft = (group: Group) =>
+  group.spotsLeft ?? Math.max(group.maxMembers - (group.memberCount ?? group.members?.length ?? 0), 0)
 
-export const membersOf = (group: Group): Person[] =>
-  group.memberIds.map((id) => peopleById[id]).filter(Boolean)
+export const membersOf = (group: Group): GroupMember[] =>
+  group.members ??
+  group.memberIds
+    ?.map((id) => peopleById[id])
+    .filter(Boolean)
+    .map((person) => ({
+      id: person.id,
+      name: person.name,
+      major: person.major,
+      gradYear: person.gradYear,
+    })) ??
+  []
 
 export const rsvpIds = (session: Session, status: RsvpStatus) =>
-  Object.entries(session.rsvps)
+  Object.entries(session.rsvps ?? {})
     .filter(([, s]) => s === status)
     .map(([id]) => id)
 
-export const rsvpPeople = (session: Session, status: RsvpStatus): Person[] =>
-  rsvpIds(session, status)
+export const rsvpPeople = (session: Session, status: RsvpStatus): GroupMember[] => {
+  if (session.attendees) {
+    return session.attendees
+      .filter((attendee) => attendee.status === status)
+      .map((attendee) => ({
+        id: attendee.id,
+        name: attendee.name,
+        major: attendee.major,
+        gradYear: attendee.gradYear,
+      }))
+  }
+
+  return rsvpIds(session, status)
     .map((id) => peopleById[id])
     .filter(Boolean)
+    .map((person) => ({
+      id: person.id,
+      name: person.name,
+      major: person.major,
+      gradYear: person.gradYear,
+    }))
+}
 
-export const goingCount = (session: Session) => rsvpIds(session, 'going').length
-export const myRsvp = (session: Session): RsvpStatus | undefined => session.rsvps[VIEWER_ID]
+export const goingCount = (session: Session) =>
+  session.goingCount ?? rsvpIds(session, 'going').length
+export const myRsvp = (session: Session): RsvpStatus | undefined =>
+  session.myRsvp ?? session.rsvps?.[VIEWER_ID]
 
 const byStart = (a: Session, b: Session) =>
   new Date(a.startsAt).getTime() - new Date(b.startsAt).getTime()
@@ -48,8 +81,8 @@ export function useMyGroups() {
 export function useGroupsCreatedByMe() {
   const { state } = useApp()
   return React.useMemo(
-    () => state.groups.filter((g) => g.creatorId === VIEWER_ID),
-    [state.groups],
+    () => state.groups.filter((g) => g.isCreator ?? g.creatorId === state.currentUser?.id),
+    [state.groups, state.currentUser?.id],
   )
 }
 
@@ -140,7 +173,7 @@ export function useSuggestedGroups(limit = 2) {
         const aMine = enrolled.has(a.courseCode) ? 0 : 1
         const bMine = enrolled.has(b.courseCode) ? 0 : 1
         if (aMine !== bMine) return aMine - bMine
-        return b.memberIds.length - a.memberIds.length
+        return membersOf(b).length - membersOf(a).length
       })
       .slice(0, limit)
   }, [state.groups, state.profile.courses, limit])
@@ -198,7 +231,7 @@ export function useCourseStats(courseCode: string) {
   const { state } = useApp()
   return React.useMemo(() => {
     const groupsInCourse = state.groups.filter((g) => g.courseCode === courseCode)
-    const studentIds = new Set(groupsInCourse.flatMap((g) => g.memberIds))
+    const studentIds = new Set(groupsInCourse.flatMap((g) => membersOf(g).map((m) => m.id)))
     const groupIds = new Set(groupsInCourse.map((g) => g.id))
     const upcomingSessions = state.sessions
       .filter((s) => groupIds.has(s.groupId) && upcoming(s))

@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { Check, ChevronRight, MapPin, Video } from 'lucide-react'
-import type { Group, Person, Session } from '@/data/types'
+import type { Group, GroupMember, Session } from '@/data/types'
 import { AvatarStack, Avatar } from '@/components/Avatar'
 import { Badge } from '@/components/primitives'
 import { dayLabel, shortWhen, time, timeRange } from '@/lib/format'
@@ -40,7 +40,7 @@ export function GroupRow({ group, unread }: { group: Group; unread?: number }) {
         <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[13px] text-muted-foreground">
           <span className="font-medium text-foreground-soft">{group.courseCode}</span>
           <span aria-hidden="true" className="text-border-strong">·</span>
-          <span>{members.length} members</span>
+          <span>{group.memberCount ?? members.length} members</span>
           {next && (
             <>
               <span aria-hidden="true" className="text-border-strong">·</span>
@@ -212,7 +212,7 @@ export function MemberRow({
   isCreator,
   isYou,
 }: {
-  person: Person
+  person: GroupMember
   isCreator?: boolean
   isYou?: boolean
 }) {
@@ -225,7 +225,8 @@ export function MemberRow({
           {isYou && <span className="ml-1.5 text-[13px] font-normal text-faint-foreground">(you)</span>}
         </p>
         <p className="truncate text-[13px] text-muted-foreground">
-          {person.major} · {person.year}
+          {person.major ?? 'Major not set'}
+          {person.gradYear ? ` · Class of ${person.gradYear}` : ''}
         </p>
       </div>
       {isCreator && (

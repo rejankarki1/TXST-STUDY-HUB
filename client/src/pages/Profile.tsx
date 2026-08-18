@@ -5,12 +5,15 @@ import { Page } from '@/layouts/AppShell'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/Avatar'
 import { PageHeader } from '@/components/primitives'
-import { courseSlug, coursesByCode } from '@/data/courses'
+import { courseSlug } from '@/lib/courses'
 import { useApp } from '@/state/AppState'
 
 export default function Profile() {
   const { state, signOut } = useApp()
   const { profile } = state
+  const courseDetailsByCode = Object.fromEntries(
+    profile.courseDetails.map((course) => [course.code, course]),
+  )
 
   return (
     <Page width="narrow">
@@ -44,7 +47,7 @@ export default function Profile() {
             >
               <p className="text-sm font-medium text-foreground">{code}</p>
               <p className="mt-0.5 text-[13px] text-muted-foreground">
-                {coursesByCode[code]?.title}
+                {courseDetailsByCode[code]?.title ?? code}
               </p>
             </Link>
           ))}

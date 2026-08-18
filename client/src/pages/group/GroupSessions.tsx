@@ -5,17 +5,45 @@ import { Button } from '@/components/ui/button'
 import { EmptyState } from '@/components/primitives'
 import { SessionListItem } from '@/components/rows'
 import { cn } from '@/lib/utils'
+import { useApp } from '@/state/AppState'
 import { isMember, useGroup, useGroupSessions } from '@/state/selectors'
 
 export default function GroupSessions() {
   const { groupId } = useParams()
   const group = useGroup(groupId)
+  const { state, refreshGroupSessions } = useApp()
   const { upcoming, past } = useGroupSessions(groupId)
   const [tab, setTab] = React.useState<'upcoming' | 'past'>('upcoming')
 
   if (!group) return null
   const joined = isMember(group)
   const list = tab === 'upcoming' ? upcoming : past
+
+  if (state.sessionsLoading) {
+    return (
+      <EmptyState
+        className="mt-6"
+        icon={CalendarPlus}
+        title="Loading sessions"
+        description="Fetching this group's study sessions."
+        compact
+      />
+    )
+  }
+
+  if (state.sessionsError) {
+    return (
+      <EmptyState
+        className="mt-6"
+        icon={History}
+        title="Sessions could not load"
+        description={state.sessionsError}
+        actionLabel="Try again"
+        onAction={() => groupId && void refreshGroupSessions(groupId)}
+        compact
+      />
+    )
+  }
 
   return (
     <div className="max-w-3xl">

@@ -5,7 +5,7 @@ import { Wordmark } from '@/components/Wordmark'
 import { NotificationBell } from '@/components/NotificationBell'
 import { Avatar } from '@/components/Avatar'
 import { Dialog, DialogTitle, SheetContent } from '@/components/ui/dialog'
-import { courseSlug, coursesByCode } from '@/data/courses'
+import { courseSlug } from '@/lib/courses'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/state/AppState'
 import { useUnreadTotal } from '@/state/selectors'
@@ -19,6 +19,9 @@ export function MobileHeader({ className }: { className?: string }) {
   const { state, signOut } = useApp()
   const [open, setOpen] = React.useState(false)
   const navigate = useNavigate()
+  const courseDetailsByCode = Object.fromEntries(
+    state.profile.courseDetails.map((course) => [course.code, course]),
+  )
 
   const go = (path: string) => {
     setOpen(false)
@@ -74,7 +77,7 @@ export function MobileHeader({ className }: { className?: string }) {
                 >
                   <span className="block text-sm font-medium text-foreground">{code}</span>
                   <span className="block truncate text-xs text-muted-foreground">
-                    {coursesByCode[code]?.title}
+                    {courseDetailsByCode[code]?.title ?? code}
                   </span>
                 </button>
               ))}

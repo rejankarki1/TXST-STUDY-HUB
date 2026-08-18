@@ -1,3 +1,4 @@
+import * as React from 'react'
 import { Link } from 'react-router-dom'
 import { Plus, Users } from 'lucide-react'
 import { Page } from '@/layouts/AppShell'
@@ -9,10 +10,14 @@ import { useApp } from '@/state/AppState'
 import { isMember, useGroupsCreatedByMe, useMyGroups, useSuggestedGroups } from '@/state/selectors'
 
 export default function MyGroups() {
-  const { state } = useApp()
+  const { state, refreshMyGroups } = useApp()
   const myGroups = useMyGroups()
   const created = useGroupsCreatedByMe()
   const suggestions = useSuggestedGroups(3)
+
+  React.useEffect(() => {
+    void refreshMyGroups()
+  }, [])
 
   return (
     <Page>
@@ -29,7 +34,20 @@ export default function MyGroups() {
         }
       />
 
-      {myGroups.length ? (
+      {state.groupsLoading && (
+        <p className="mb-5 text-sm text-muted-foreground">Loading your study groups...</p>
+      )}
+
+      {state.groupsError && (
+        <EmptyState
+          className="mb-5"
+          icon={Users}
+          title="Study groups could not load"
+          description={state.groupsError}
+        />
+      )}
+
+      {!state.groupsError && myGroups.length ? (
         <section>
           <SectionHeader title="Joined groups" count={myGroups.length} />
           <div className="divide-y divide-border border-y border-border">
@@ -38,7 +56,7 @@ export default function MyGroups() {
             ))}
           </div>
         </section>
-      ) : (
+      ) : !state.groupsError && !state.groupsLoading ? (
         <EmptyState
           icon={Users}
           title="No groups yet"
@@ -46,7 +64,7 @@ export default function MyGroups() {
           actionLabel="Discover groups"
           to="/discover"
         />
-      )}
+      ) : null}
 
       {created.length > 0 && (
         <section className="mt-9">

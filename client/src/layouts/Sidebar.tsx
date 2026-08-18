@@ -11,7 +11,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { courseSlug, coursesByCode } from '@/data/courses'
+import { courseSlug } from '@/lib/courses'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/state/AppState'
 import { useUnreadTotal } from '@/state/selectors'
@@ -45,6 +45,9 @@ export function Sidebar({ className }: { className?: string }) {
   const { state, signOut } = useApp()
   const unread = useUnreadTotal()
   const navigate = useNavigate()
+  const courseDetailsByCode = Object.fromEntries(
+    state.profile.courseDetails.map((course) => [course.code, course]),
+  )
 
   return (
     <aside
@@ -101,7 +104,7 @@ export function Sidebar({ className }: { className?: string }) {
                     : 'text-muted-foreground hover:bg-surface-sunken hover:text-foreground',
                 )
               }
-              title={coursesByCode[code]?.title}
+              title={courseDetailsByCode[code]?.title ?? code}
             >
               {code}
             </NavLink>

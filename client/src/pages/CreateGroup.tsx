@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Field, Input, Textarea } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { PageHeader } from '@/components/primitives'
-import { courses } from '@/data/courses'
 import type { GroupPurpose, MeetingStyle } from '@/data/types'
 import { useApp } from '@/state/AppState'
 
@@ -28,24 +27,45 @@ export default function CreateGroup() {
   const { state, createGroup } = useApp()
   const navigate = useNavigate()
   const [name, setName] = React.useState('')
-  const [courseCode, setCourseCode] = React.useState(state.profile.courses[0] ?? courses[0].code)
+  const [courseId, setCourseId] = React.useState('')
   const [description, setDescription] = React.useState('')
   const [purpose, setPurpose] = React.useState<GroupPurpose>('Weekly studying')
   const [meetingStyle, setMeetingStyle] = React.useState<MeetingStyle>('flexible')
   const [maxMembers, setMaxMembers] = React.useState(6)
+  const selectedCourse = state.courses.find((course) => course.id === courseId)
 
-  const submit = (event: React.FormEvent) => {
+  React.useEffect(() => {
+    if (courseId || state.courses.length === 0) return
+
+    const selectedUserCourse = state.courses.find((course) =>
+      state.profile.courses.includes(course.code),
+    )
+    setCourseId((selectedUserCourse ?? state.courses[0]).id)
+  }, [courseId, state.courses, state.profile.courses])
+
+  const [submitting, setSubmitting] = React.useState(false)
+
+  const submit = async (event: React.FormEvent) => {
     event.preventDefault()
-    const id = createGroup({
-      name: name.trim() || `${courseCode} study group`,
-      courseCode,
-      description:
-        description.trim() || 'A study group for classmates to compare notes and prepare together.',
-      purpose,
-      meetingStyle,
-      maxMembers,
-    })
-    navigate(`/groups/${id}`)
+    if (!selectedCourse) return
+
+    setSubmitting(true)
+    try {
+      const id = await createGroup({
+        name: name.trim() || `${selectedCourse.code} study group`,
+        courseId: selectedCourse.id,
+        description:
+          description.trim() || 'A study group for classmates to compare notes and prepare together.',
+        purpose,
+        meetingStyle,
+        maxMembers,
+      })
+      navigate(`/groups/${id}`)
+    } catch {
+      // AppState shows the API error toast.
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -66,18 +86,28 @@ export default function CreateGroup() {
         </Field>
 
         <Field label="Course" htmlFor="course">
-          <Select value={courseCode} onValueChange={setCourseCode}>
+          <Select value={courseId} onValueChange={setCourseId} disabled={state.coursesLoading}>
             <SelectTrigger id="course">
-              <SelectValue />
+              <SelectValue
+                placeholder={state.coursesLoading ? 'Loading courses...' : 'Choose a course'}
+              />
             </SelectTrigger>
             <SelectContent>
-              {courses.map((course) => (
-                <SelectItem key={course.code} value={course.code}>
+              {state.courses.map((course) => (
+                <SelectItem key={course.id} value={course.id}>
                   {course.code} · {course.title}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          {state.coursesError && (
+            <p className="mt-1.5 text-[13px] text-danger">{state.coursesError}</p>
+          )}
+          {!state.coursesLoading && !state.coursesError && state.courses.length === 0 && (
+            <p className="mt-1.5 text-[13px] text-muted-foreground">
+              No courses are available yet.
+            </p>
+          )}
         </Field>
 
         <Field label="Description" htmlFor="description">
@@ -137,9 +167,9 @@ export default function CreateGroup() {
         </Field>
 
         <div className="flex justify-end">
-          <Button type="submit" variant="primary">
+          <Button type="submit" variant="primary" disabled={!selectedCourse || submitting}>
             <Plus />
-            Create group
+            {submitting ? 'Creating...' : 'Create group'}
           </Button>
         </div>
       </form>

@@ -49,7 +49,10 @@ export function GroupCard({ group, className }: { group: Group; className?: stri
       <div className="mt-4 flex items-center gap-2.5">
         <AvatarStack people={members} max={4} size="sm" />
         <span className="text-[13px] text-muted-foreground">
-          <span className="font-medium text-foreground-soft">{members.length}</span> of{' '}
+          <span className="font-medium text-foreground-soft">
+            {group.memberCount ?? members.length}
+          </span>{' '}
+          of{' '}
           {group.maxMembers} members
         </span>
       </div>
@@ -90,7 +93,7 @@ export function GroupCard({ group, className }: { group: Group; className?: stri
             Group full
           </Button>
         ) : (
-          <Button size="sm" variant="primary" onClick={() => joinGroup(group.id)}>
+          <Button size="sm" variant="primary" onClick={() => void joinGroup(group.id)}>
             Join
           </Button>
         )}

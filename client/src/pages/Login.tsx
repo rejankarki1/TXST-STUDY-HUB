@@ -9,15 +9,16 @@ import { AuthLayout } from './auth/AuthLayout'
 type Errors = Partial<Record<'email' | 'password', string>>
 
 export default function Login() {
-  const { signIn, enterDemo } = useApp()
+  const { login, enterDemo } = useApp()
   const navigate = useNavigate()
   const [values, setValues] = React.useState({ email: '', password: '' })
   const [errors, setErrors] = React.useState<Errors>({})
+  const [submitting, setSubmitting] = React.useState(false)
 
   const set = (key: keyof typeof values) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setValues((v) => ({ ...v, [key]: e.target.value }))
 
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault()
     const next: Errors = {}
     if (!values.email.trim()) next.email = 'Enter your email'
@@ -26,10 +27,19 @@ export default function Login() {
     setErrors(next)
     if (Object.keys(next).length) return
 
-    /* Prototype: any credentials sign you into the demo account. */
-    signIn({ email: values.email })
-    enterDemo()
-    navigate('/home')
+    setSubmitting(true)
+    try {
+      const user = await login({
+        email: values.email.trim(),
+        password: values.password,
+      })
+
+      navigate(user.onboardingCompleted ? '/home' : '/onboarding')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Login failed')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -86,8 +96,8 @@ export default function Login() {
           />
         </Field>
 
-        <Button type="submit" variant="primary" size="lg" className="w-full">
-          Log in
+        <Button type="submit" variant="primary" size="lg" className="w-full" disabled={submitting}>
+          {submitting ? 'Logging in...' : 'Log in'}
         </Button>
       </form>
 

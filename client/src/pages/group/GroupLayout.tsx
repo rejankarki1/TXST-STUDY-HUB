@@ -1,3 +1,4 @@
+import * as React from 'react'
 import { Link, NavLink, Outlet, useMatch, useNavigate, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -8,7 +9,7 @@ import {
   MoreHorizontal,
   Users,
 } from 'lucide-react'
-import type { Group, Person } from '@/data/types'
+import type { Group, GroupMember } from '@/data/types'
 import { Page } from '@/layouts/AppShell'
 import { Button } from '@/components/ui/button'
 import {
@@ -20,7 +21,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { AvatarStack } from '@/components/Avatar'
 import { Badge, EmptyState } from '@/components/primitives'
-import { courseSlug } from '@/data/courses'
+import { courseSlug } from '@/lib/courses'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/state/AppState'
 import { isFull, isMember, membersOf, useGroup } from '@/state/selectors'
@@ -28,9 +29,41 @@ import { isFull, isMember, membersOf, useGroup } from '@/state/selectors'
 export default function GroupLayout() {
   const { groupId } = useParams()
   const group = useGroup(groupId)
-  const { state, joinGroup, leaveGroup } = useApp()
+  const { state, joinGroup, leaveGroup, refreshGroup, refreshGroupSessions } = useApp()
   const navigate = useNavigate()
   const inChat = Boolean(useMatch('/groups/:groupId/chat'))
+
+  React.useEffect(() => {
+    if (!groupId) return
+    void refreshGroup(groupId)
+    void refreshGroupSessions(groupId)
+  }, [groupId])
+
+  if (state.groupsLoading) {
+    return (
+      <Page>
+        <EmptyState
+          icon={Users}
+          title="Loading study group"
+          description="Fetching the latest group details."
+        />
+      </Page>
+    )
+  }
+
+  if (state.groupsError) {
+    return (
+      <Page>
+        <EmptyState
+          icon={Users}
+          title="Study group could not load"
+          description={state.groupsError}
+          actionLabel="Browse groups"
+          to="/discover"
+        />
+      </Page>
+    )
+  }
 
   if (!group) {
     return (
@@ -110,7 +143,7 @@ export default function GroupLayout() {
           <DropdownMenuItem
             destructive
             onSelect={() => {
-              leaveGroup(group.id)
+              void leaveGroup(group.id)
               navigate('/discover')
             }}
           >
@@ -125,7 +158,7 @@ export default function GroupLayout() {
       Group full
     </Button>
   ) : (
-    <Button variant="primary" onClick={() => joinGroup(group.id)}>
+    <Button variant="primary" onClick={() => void joinGroup(group.id)}>
       Join group
     </Button>
   )
@@ -177,7 +210,7 @@ function GroupHeading({
   compact,
 }: {
   group: Group
-  members: Person[]
+  members: GroupMember[]
   compact?: boolean
 }) {
   const joined = isMember(group)

@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
 import { ArrowLeft, ArrowRight, Check, Search, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input, Label } from '@/components/ui/input'
 import {
@@ -11,8 +12,6 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Wordmark } from '@/components/Wordmark'
-import { courses } from '@/data/courses'
-import { groups } from '@/data/groups'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/state/AppState'
 
@@ -31,8 +30,6 @@ const MAJORS = [
 
 const GRAD_YEARS = ['2026', '2027', '2028', '2029', '2030']
 
-const groupCount = (code: string) => groups.filter((g) => g.courseCode === code).length
-
 export default function Onboarding() {
   const { state, completeOnboarding } = useApp()
   const navigate = useNavigate()
@@ -42,12 +39,14 @@ export default function Onboarding() {
   const [gradYear, setGradYear] = React.useState('')
   const [selected, setSelected] = React.useState<string[]>([])
   const [query, setQuery] = React.useState('')
+  const [submitting, setSubmitting] = React.useState(false)
 
+  if (state.authLoading) return null
   if (!state.signedIn) return <Navigate to="/signup" replace />
   if (state.onboarded) return <Navigate to="/home" replace />
 
   const firstName = state.profile.name.split(' ')[0]
-  const results = courses.filter((c) => {
+  const results = state.courses.filter((c) => {
     const q = query.trim().toLowerCase()
     if (!q) return true
     return c.code.toLowerCase().includes(q) || c.title.toLowerCase().includes(q)
@@ -58,15 +57,24 @@ export default function Onboarding() {
       prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code],
     )
 
-  const matchingGroups = groups.filter((g) => selected.includes(g.courseCode)).length
+  const groupCount = (code: string) => state.groups.filter((g) => g.courseCode === code).length
+  const matchingGroups = state.groups.filter((g) => selected.includes(g.courseCode)).length
 
-  function finish() {
-    completeOnboarding({
-      major: major || 'Undecided',
-      gradYear: Number(gradYear) || 2029,
-      courses: selected,
-    })
-    navigate('/home')
+  async function finish() {
+    setSubmitting(true)
+    try {
+      await completeOnboarding({
+        name: state.profile.name,
+        major: major || 'Undecided',
+        gradYear: Number(gradYear) || 2029,
+        courseCodes: selected,
+      })
+      navigate('/home')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Could not complete onboarding')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -192,7 +200,19 @@ export default function Onboarding() {
               )}
 
               <div className="mt-5 max-h-[22rem] space-y-2 overflow-y-auto scroll-slim pr-1">
-                {results.map((course) => {
+                {state.coursesLoading && (
+                  <p className="py-10 text-center text-sm text-muted-foreground">
+                    Loading courses...
+                  </p>
+                )}
+
+                {!state.coursesLoading && state.coursesError && (
+                  <p className="py-10 text-center text-sm text-danger">
+                    {state.coursesError}
+                  </p>
+                )}
+
+                {!state.coursesLoading && !state.coursesError && results.map((course) => {
                   const on = selected.includes(course.code)
                   const count = groupCount(course.code)
                   return (
@@ -236,7 +256,7 @@ export default function Onboarding() {
                   )
                 })}
 
-                {results.length === 0 && (
+                {!state.coursesLoading && !state.coursesError && results.length === 0 && (
                   <p className="py-10 text-center text-sm text-muted-foreground">
                     No courses match “{query}”.
                   </p>
@@ -280,7 +300,7 @@ export default function Onboarding() {
 
               <ul className="mt-8 divide-y divide-border border-y border-border">
                 {selected.map((code) => {
-                  const course = courses.find((c) => c.code === code)
+                  const course = state.courses.find((c) => c.code === code)
                   const count = groupCount(code)
                   return (
                     <li key={code} className="flex items-center justify-between gap-4 py-3.5">
@@ -299,8 +319,8 @@ export default function Onboarding() {
               </ul>
 
               <div className="mt-9 flex items-center gap-3">
-                <Button variant="primary" size="lg" onClick={finish}>
-                  Explore your dashboard
+                <Button variant="primary" size="lg" onClick={finish} disabled={submitting}>
+                  {submitting ? 'Saving...' : 'Explore your dashboard'}
                   <ArrowRight />
                 </Button>
                 <Button variant="ghost" size="lg" onClick={() => setStep(1)}>

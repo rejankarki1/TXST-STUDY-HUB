@@ -1,4 +1,4 @@
-import type * as React from 'react'
+import * as React from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { Calendar, Plus, Users } from 'lucide-react'
 import { Page } from '@/layouts/AppShell'
@@ -6,24 +6,67 @@ import { Button } from '@/components/ui/button'
 import { EmptyState, PageHeader, SectionHeader } from '@/components/primitives'
 import { GroupCard } from '@/components/GroupCard'
 import { SessionRow } from '@/components/rows'
-import { codeFromSlug, coursesByCode } from '@/data/courses'
+import { courseBySlug } from '@/lib/courses'
+import { useApp } from '@/state/AppState'
 import { useCourseStats } from '@/state/selectors'
 
 export default function CoursePage() {
   const { slug } = useParams()
-  const code = codeFromSlug(slug ?? '')
-  const stats = useCourseStats(code ?? '')
+  const { state, refreshCourseGroups } = useApp()
+  const course = courseBySlug(state.courses, slug ?? '')
+  const stats = useCourseStats(course?.code ?? '')
 
-  if (!code) return <Navigate to="/discover" replace />
+  React.useEffect(() => {
+    if (!course?.id) return
+    void refreshCourseGroups(course.id)
+  }, [course?.id])
 
-  const course = coursesByCode[code]
+  if (state.coursesLoading) {
+    return (
+      <Page>
+        <PageHeader title="Loading course..." description="Fetching course details from TXST Study Hub." />
+      </Page>
+    )
+  }
+
+  if (state.coursesError) {
+    return (
+      <Page>
+        <EmptyState
+          icon={Users}
+          title="Courses could not load"
+          description={state.coursesError}
+          actionLabel="Back to discover"
+          to="/discover"
+        />
+      </Page>
+    )
+  }
+
+  if (!course && state.courses.length === 0) {
+    return (
+      <Page>
+        <EmptyState
+          icon={Users}
+          title="No courses available"
+          description="Course data is empty right now."
+          actionLabel="Back to discover"
+          to="/discover"
+        />
+      </Page>
+    )
+  }
+
+  if (!course) return <Navigate to="/discover" replace />
+
   const groupNames = new Map(stats.groups.map((group) => [group.id, group.name]))
+  const department = course.department?.name ?? course.department?.code ?? 'Department not assigned'
 
   return (
     <Page>
       <PageHeader
-        title={code}
-        description={`${course.title} · ${course.department}`}
+        title={course.code}
+        description={`${course.title} · ${department}`}
         action={
           <Button asChild variant="primary">
             <Link to="/groups/new">
@@ -34,6 +77,21 @@ export default function CoursePage() {
         }
       />
 
+      {state.groupsLoading && (
+        <p className="mb-5 text-sm text-muted-foreground">Loading study groups...</p>
+      )}
+
+      {state.groupsError && (
+        <EmptyState
+          className="mb-5"
+          icon={Users}
+          title="Study groups could not load"
+          description={state.groupsError}
+          actionLabel="Back to discover"
+          to="/discover"
+        />
+      )}
+
       <div className="mb-8 grid gap-3 sm:grid-cols-3">
         <Stat icon={Users} label="Students" value={stats.studentCount} />
         <Stat icon={Users} label="Groups" value={stats.groups.length} />
@@ -42,13 +100,13 @@ export default function CoursePage() {
 
       <section>
         <SectionHeader title="Study groups" count={stats.groups.length} action="Find more" to="/discover" />
-        {stats.groups.length ? (
+        {!state.groupsError && stats.groups.length ? (
           <div className="grid gap-4 lg:grid-cols-2">
             {stats.groups.map((group) => (
               <GroupCard key={group.id} group={group} />
             ))}
           </div>
-        ) : (
+        ) : !state.groupsError && !state.groupsLoading ? (
           <EmptyState
             icon={Users}
             title="No groups for this course yet"
@@ -56,7 +114,7 @@ export default function CoursePage() {
             actionLabel="Create group"
             to="/groups/new"
           />
-        )}
+        ) : null}
       </section>
 
       {stats.upcomingSessions.length > 0 && (

@@ -6,10 +6,10 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Chip, EmptyState, PageHeader } from '@/components/primitives'
 import { GroupCard } from '@/components/GroupCard'
-import { coursesByCode } from '@/data/courses'
+import { coursesByCode } from '@/lib/courses'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/state/AppState'
-import { isFull, isMember } from '@/state/selectors'
+import { isFull, isMember, membersOf } from '@/state/selectors'
 
 type Filter = 'my-courses' | 'open' | 'in-person' | 'online'
 
@@ -26,6 +26,7 @@ export default function Discover() {
   const [query, setQuery] = React.useState('')
   const [course, setCourse] = React.useState<string>('all')
   const [filters, setFilters] = React.useState<Filter[]>([])
+  const realCoursesByCode = React.useMemo(() => coursesByCode(state.courses), [state.courses])
 
   const toggleFilter = (id: Filter) =>
     setFilters((prev) => (prev.includes(id) ? prev.filter((f) => f !== id) : [...prev, id]))
@@ -56,10 +57,10 @@ export default function Discover() {
         g.name.toLowerCase().includes(q) ||
         g.courseCode.toLowerCase().includes(q) ||
         g.description.toLowerCase().includes(q) ||
-        (coursesByCode[g.courseCode]?.title.toLowerCase().includes(q) ?? false)
+        (realCoursesByCode[g.courseCode]?.title.toLowerCase().includes(q) ?? false)
       )
     })
-  }, [state.groups, state.profile.courses, query, course, filters])
+  }, [state.groups, state.profile.courses, realCoursesByCode, query, course, filters])
 
   /* Groups you're already in sink to the bottom — you came here to find new ones. */
   const sorted = React.useMemo(
@@ -68,7 +69,7 @@ export default function Discover() {
         const aJoined = isMember(a) ? 1 : 0
         const bJoined = isMember(b) ? 1 : 0
         if (aJoined !== bJoined) return aJoined - bJoined
-        return b.memberIds.length - a.memberIds.length
+        return membersOf(b).length - membersOf(a).length
       }),
     [results],
   )
@@ -93,6 +94,19 @@ export default function Discover() {
           </Button>
         }
       />
+
+      {state.groupsLoading && (
+        <p className="mb-5 text-sm text-muted-foreground">Loading study groups...</p>
+      )}
+
+      {state.groupsError && (
+        <EmptyState
+          className="mb-5"
+          icon={SearchX}
+          title="Study groups could not load"
+          description={state.groupsError}
+        />
+      )}
 
       {/* search */}
       <div className="relative">
@@ -188,13 +202,13 @@ export default function Discover() {
         )}
       </div>
 
-      {sorted.length ? (
+      {!state.groupsError && sorted.length ? (
         <div className="mt-4 grid gap-4 lg:grid-cols-2">
           {sorted.map((group) => (
             <GroupCard key={group.id} group={group} />
           ))}
         </div>
-      ) : (
+      ) : !state.groupsError && !state.groupsLoading ? (
         <EmptyState
           className="mt-4"
           icon={SearchX}
@@ -203,7 +217,7 @@ export default function Discover() {
           actionLabel="Create a study group"
           to="/groups/new"
         />
-      )}
+      ) : null}
     </Page>
   )
 }

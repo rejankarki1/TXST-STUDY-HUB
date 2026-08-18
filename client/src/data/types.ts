@@ -8,12 +8,6 @@ export type Person = {
   gradYear: number
 }
 
-export type Course = {
-  code: string
-  title: string
-  department: string
-}
-
 export type MeetingStyle = 'in-person' | 'online' | 'flexible'
 
 export type GroupPurpose =
@@ -23,20 +17,41 @@ export type GroupPurpose =
   | 'Project work'
   | 'General study'
 
+export type GroupMember = {
+  id: string
+  name: string
+  major?: string | null
+  gradYear?: number | null
+  joinedAt?: string
+}
+
 export type Group = {
   id: string
   name: string
+  courseId?: string
   courseCode: string
   description: string
   purpose: GroupPurpose
   meetingStyle: MeetingStyle
   maxMembers: number
-  memberIds: string[]
+  members?: GroupMember[]
+  memberIds?: string[]
+  memberCount?: number
+  spotsLeft?: number
+  isFull?: boolean
+  isMember?: boolean
+  isCreator?: boolean
   creatorId: string
+  creator?: GroupMember
   createdAt: string
 }
 
 export type RsvpStatus = 'going' | 'maybe' | 'cant'
+
+export type SessionAttendee = GroupMember & {
+  status: RsvpStatus
+  rsvpUpdatedAt?: string
+}
 
 export type Session = {
   id: string
@@ -51,7 +66,22 @@ export type Session = {
   locationDetail?: string
   meetingLink?: string
   organizerId: string
-  rsvps: Record<string, RsvpStatus>
+  organizer?: GroupMember
+  group?: {
+    id: string
+    name: string
+    course: {
+      id: string
+      code: string
+      title: string
+    }
+  }
+  attendees?: SessionAttendee[]
+  myRsvp?: RsvpStatus
+  goingCount?: number
+  maybeCount?: number
+  cantCount?: number
+  rsvps?: Record<string, RsvpStatus>
   /** When the session was put on the calendar — drives the activity feed. */
   createdAt?: string
 }

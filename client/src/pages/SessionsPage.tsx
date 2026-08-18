@@ -1,3 +1,4 @@
+import * as React from 'react'
 import { Link } from 'react-router-dom'
 import { CalendarPlus, CalendarX } from 'lucide-react'
 import { Page } from '@/layouts/AppShell'
@@ -8,11 +9,41 @@ import { useApp } from '@/state/AppState'
 import { useMyGroups, useMySessions } from '@/state/selectors'
 
 export default function SessionsPage() {
-  const { state } = useApp()
+  const { state, refreshSessions } = useApp()
   const myGroups = useMyGroups()
   const { upcoming, past } = useMySessions()
   const names = new Map(state.groups.map((group) => [group.id, group.name]))
   const firstGroup = myGroups[0]
+
+  React.useEffect(() => {
+    void refreshSessions()
+  }, [])
+
+  if (state.sessionsLoading) {
+    return (
+      <Page>
+        <EmptyState
+          icon={CalendarX}
+          title="Loading sessions"
+          description="Fetching your study schedule."
+        />
+      </Page>
+    )
+  }
+
+  if (state.sessionsError) {
+    return (
+      <Page>
+        <EmptyState
+          icon={CalendarX}
+          title="Sessions could not load"
+          description={state.sessionsError}
+          actionLabel="Try again"
+          onAction={() => void refreshSessions()}
+        />
+      </Page>
+    )
+  }
 
   return (
     <Page>

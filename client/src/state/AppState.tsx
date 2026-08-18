@@ -2,6 +2,7 @@ import * as React from 'react'
 import { toast } from 'sonner'
 import type {
   Group,
+  GroupMember,
   GroupPurpose,
   MeetingStyle,
   Message,
@@ -17,6 +18,13 @@ import { defaultEnrolledCourses } from '@/data/courses'
 import { VIEWER_ID, peopleById } from '@/data/people'
 import { nextReply } from '@/data/replies'
 import { plusMinutes } from '@/data/time'
+import {
+  api,
+  type ApiCourse,
+  type ApiStudyGroup,
+  type ApiStudySession,
+  type CurrentUser,
+} from '@/lib/api'
 
 /* ------------------------------------------------------------------ types */
 
@@ -26,11 +34,24 @@ export type Profile = {
   major: string
   gradYear: number
   courses: string[]
+  courseDetails: ApiCourse[]
 }
 
 export type AppState = {
   signedIn: boolean
   onboarded: boolean
+  authLoading: boolean
+  authError: string | null
+  accessToken: string | null
+  currentUser: CurrentUser | null
+  demoMode: boolean
+  courses: ApiCourse[]
+  coursesLoading: boolean
+  coursesError: string | null
+  groupsLoading: boolean
+  groupsError: string | null
+  sessionsLoading: boolean
+  sessionsError: string | null
   profile: Profile
   groups: Group[]
   sessions: Session[]
@@ -43,17 +64,28 @@ export type AppState = {
 }
 
 type Action =
-  | { type: 'SIGN_IN'; email?: string; name?: string }
+  | { type: 'AUTH_LOADING'; loading: boolean }
+  | { type: 'AUTH_SUCCESS'; user: CurrentUser; accessToken: string }
+  | { type: 'AUTH_FAILURE'; message?: string }
+  | { type: 'COURSES_LOADING'; loading: boolean }
+  | { type: 'COURSES_SUCCESS'; courses: ApiCourse[] }
+  | { type: 'COURSES_FAILURE'; message: string }
+  | { type: 'GROUPS_LOADING'; loading: boolean }
+  | { type: 'GROUPS_SUCCESS'; groups: Group[] }
+  | { type: 'GROUPS_FAILURE'; message: string }
+  | { type: 'UPSERT_GROUP'; group: Group }
+  | { type: 'UPSERT_GROUPS'; groups: Group[] }
+  | { type: 'SESSIONS_LOADING'; loading: boolean }
+  | { type: 'SESSIONS_SUCCESS'; sessions: Session[] }
+  | { type: 'SESSIONS_FAILURE'; message: string }
+  | { type: 'UPSERT_SESSION'; session: Session }
+  | { type: 'UPSERT_SESSIONS'; sessions: Session[] }
   | { type: 'SIGN_OUT' }
   | { type: 'ENTER_DEMO' }
-  | { type: 'COMPLETE_ONBOARDING'; major: string; gradYear: number; courses: string[] }
-  | { type: 'JOIN_GROUP'; groupId: string }
-  | { type: 'LEAVE_GROUP'; groupId: string }
   | { type: 'SET_RSVP'; sessionId: string; status: RsvpStatus }
   | { type: 'SEND_MESSAGE'; message: Message }
   | { type: 'RECEIVE_MESSAGE'; message: Message }
   | { type: 'SET_TYPING'; groupId: string | null }
-  | { type: 'CREATE_GROUP'; group: Group }
   | { type: 'CREATE_SESSION'; session: Session }
   | { type: 'MARK_GROUP_READ'; groupId: string }
   | { type: 'MARK_NOTIFICATIONS_READ' }
@@ -66,14 +98,31 @@ const DEMO_PROFILE: Profile = {
   major: 'Computer Science',
   gradYear: 2029,
   courses: defaultEnrolledCourses,
+  courseDetails: [],
 }
 
-const initialState: AppState = {
-  signedIn: false,
-  onboarded: false,
-  profile: DEMO_PROFILE,
-  groups: seedGroups,
-  sessions: seedSessions,
+const EMPTY_PROFILE: Profile = {
+  name: '',
+  email: '',
+  major: '',
+  gradYear: new Date().getFullYear() + 3,
+  courses: [],
+  courseDetails: [],
+}
+
+function profileFromUser(user: CurrentUser): Profile {
+  return {
+    name: user.name ?? user.email,
+    email: user.email,
+    major: user.major ?? '',
+    gradYear: user.gradYear ?? new Date().getFullYear() + 3,
+    courses: user.courses.map((course) => course.code),
+    courseDetails: user.courses,
+  }
+}
+
+const collaborationState = {
+  sessions: [],
   messages: seedMessages,
   notifications: seedNotifications,
   unread: initialUnread,
@@ -81,58 +130,281 @@ const initialState: AppState = {
   replyTurn: {},
 }
 
+const initialState: AppState = {
+  signedIn: false,
+  onboarded: false,
+  authLoading: true,
+  authError: null,
+  accessToken: null,
+  currentUser: null,
+  demoMode: false,
+  courses: [],
+  coursesLoading: true,
+  coursesError: null,
+  groups: [],
+  groupsLoading: false,
+  groupsError: null,
+  sessionsLoading: false,
+  sessionsError: null,
+  profile: EMPTY_PROFILE,
+  ...collaborationState,
+}
+
+function groupFromApi(group: ApiStudyGroup): Group {
+  return {
+    id: group.id,
+    name: group.name,
+    courseId: group.courseId,
+    courseCode: group.course.code,
+    description: group.description,
+    purpose: group.purpose,
+    meetingStyle: group.meetingStyle,
+    maxMembers: group.maxMembers,
+    members: group.members,
+    memberCount: group.memberCount,
+    spotsLeft: group.spotsLeft,
+    isFull: group.isFull,
+    isMember: group.isMember,
+    isCreator: group.isCreator,
+    creatorId: group.creator.id,
+    creator: group.creator,
+    createdAt: group.createdAt,
+  }
+}
+
+function demoMember(id: string): GroupMember | undefined {
+  const person = peopleById[id]
+  if (!person) return undefined
+  return {
+    id: person.id,
+    name: person.name,
+    major: person.major,
+    gradYear: person.gradYear,
+  }
+}
+
+function groupFromDemo(group: Group): Group {
+  const members = group.memberIds?.map(demoMember).filter((member): member is GroupMember => Boolean(member)) ?? []
+  return {
+    ...group,
+    members,
+    memberCount: members.length,
+    spotsLeft: Math.max(group.maxMembers - members.length, 0),
+    isFull: members.length >= group.maxMembers,
+    isMember: group.memberIds?.includes(VIEWER_ID) ?? false,
+    isCreator: group.creatorId === VIEWER_ID,
+    creator: demoMember(group.creatorId),
+  }
+}
+
+function sessionFromApi(session: ApiStudySession): Session {
+  return {
+    id: session.id,
+    groupId: session.groupId,
+    title: session.title,
+    description: session.description,
+    startsAt: session.startsAt,
+    endsAt: session.endsAt,
+    mode: session.mode,
+    location: session.location,
+    locationDetail: session.locationDetail ?? undefined,
+    meetingLink: session.meetingLink ?? undefined,
+    organizerId: session.organizerId,
+    organizer: session.organizer,
+    group: session.group,
+    attendees: session.attendees,
+    myRsvp: session.myRsvp,
+    goingCount: session.goingCount,
+    maybeCount: session.maybeCount,
+    cantCount: session.cantCount,
+    createdAt: session.createdAt,
+  }
+}
+
+function sessionFromDemo(session: Session): Session {
+  const attendees =
+    Object.entries(session.rsvps ?? {})
+      .map(([id, status]) => {
+        const person = peopleById[id]
+        if (!person) return undefined
+        return {
+          id: person.id,
+          name: person.name,
+          major: person.major,
+          gradYear: person.gradYear,
+          status,
+        }
+      })
+      .filter((attendee): attendee is NonNullable<typeof attendee> => Boolean(attendee)) ?? []
+
+  return {
+    ...session,
+    attendees,
+    myRsvp: session.rsvps?.[VIEWER_ID],
+    goingCount: attendees.filter((attendee) => attendee.status === 'going').length,
+    maybeCount: attendees.filter((attendee) => attendee.status === 'maybe').length,
+    cantCount: attendees.filter((attendee) => attendee.status === 'cant').length,
+  }
+}
+
 /* --------------------------------------------------------------- reducer */
 
 function reducer(state: AppState, action: Action): AppState {
   switch (action.type) {
-    case 'SIGN_IN':
+    case 'AUTH_LOADING':
+      return { ...state, authLoading: action.loading, authError: null }
+
+    case 'AUTH_SUCCESS':
       return {
         ...state,
         signedIn: true,
-        profile: {
-          ...state.profile,
-          name: action.name?.trim() || state.profile.name,
-          email: action.email?.trim() || state.profile.email,
-        },
+        onboarded: action.user.onboardingCompleted,
+        authLoading: false,
+        authError: null,
+        accessToken: action.accessToken,
+        currentUser: action.user,
+        demoMode: false,
+        profile: profileFromUser(action.user),
       }
+
+    case 'AUTH_FAILURE':
+      return {
+        ...state,
+        signedIn: false,
+        onboarded: false,
+        authLoading: false,
+        authError: action.message ?? null,
+        accessToken: null,
+        currentUser: null,
+        demoMode: false,
+        profile: EMPTY_PROFILE,
+      }
+
+    case 'COURSES_LOADING':
+      return { ...state, coursesLoading: action.loading, coursesError: null }
+
+    case 'COURSES_SUCCESS':
+      return {
+        ...state,
+        courses: action.courses,
+        coursesLoading: false,
+        coursesError: null,
+      }
+
+    case 'COURSES_FAILURE':
+      return {
+        ...state,
+        coursesLoading: false,
+        coursesError: action.message,
+      }
+
+    case 'GROUPS_LOADING':
+      return { ...state, groupsLoading: action.loading, groupsError: null }
+
+    case 'GROUPS_SUCCESS':
+      return {
+        ...state,
+        groups: action.groups,
+        groupsLoading: false,
+        groupsError: null,
+      }
+
+    case 'GROUPS_FAILURE':
+      return {
+        ...state,
+        groupsLoading: false,
+        groupsError: action.message,
+      }
+
+    case 'UPSERT_GROUP':
+      return {
+        ...state,
+        groups: state.groups.some((group) => group.id === action.group.id)
+          ? state.groups.map((group) => (group.id === action.group.id ? action.group : group))
+          : [action.group, ...state.groups],
+        groupsLoading: false,
+        groupsError: null,
+      }
+
+    case 'UPSERT_GROUPS': {
+      const next = new Map(state.groups.map((group) => [group.id, group]))
+      action.groups.forEach((group) => next.set(group.id, group))
+      return {
+        ...state,
+        groups: [...next.values()],
+        groupsLoading: false,
+        groupsError: null,
+      }
+    }
+
+    case 'SESSIONS_LOADING':
+      return { ...state, sessionsLoading: action.loading, sessionsError: null }
+
+    case 'SESSIONS_SUCCESS':
+      return {
+        ...state,
+        sessions: action.sessions,
+        sessionsLoading: false,
+        sessionsError: null,
+      }
+
+    case 'SESSIONS_FAILURE':
+      return {
+        ...state,
+        sessionsLoading: false,
+        sessionsError: action.message,
+      }
+
+    case 'UPSERT_SESSION':
+      return {
+        ...state,
+        sessions: state.sessions.some((session) => session.id === action.session.id)
+          ? state.sessions.map((session) =>
+              session.id === action.session.id ? action.session : session,
+            )
+          : [action.session, ...state.sessions],
+        sessionsLoading: false,
+        sessionsError: null,
+      }
+
+    case 'UPSERT_SESSIONS': {
+      const next = new Map(state.sessions.map((session) => [session.id, session]))
+      action.sessions.forEach((session) => next.set(session.id, session))
+      return {
+        ...state,
+        sessions: [...next.values()],
+        sessionsLoading: false,
+        sessionsError: null,
+      }
+    }
 
     case 'SIGN_OUT':
-      return { ...initialState }
+      return {
+        ...initialState,
+        courses: state.courses,
+        coursesLoading: state.coursesLoading,
+        coursesError: state.coursesError,
+        authLoading: false,
+      }
 
-    /* "Skip to demo" — a fully populated account, no onboarding. */
+    /* "Skip to demo" — a fully populated account, no backend auth. */
     case 'ENTER_DEMO':
-      return { ...state, signedIn: true, onboarded: true, profile: DEMO_PROFILE }
-
-    case 'COMPLETE_ONBOARDING':
       return {
         ...state,
+        signedIn: true,
         onboarded: true,
-        profile: {
-          ...state.profile,
-          major: action.major,
-          gradYear: action.gradYear,
-          courses: action.courses,
-        },
-      }
-
-    case 'JOIN_GROUP':
-      return {
-        ...state,
-        groups: state.groups.map((g) =>
-          g.id === action.groupId && !g.memberIds.includes(VIEWER_ID)
-            ? { ...g, memberIds: [...g.memberIds, VIEWER_ID] }
-            : g,
-        ),
-      }
-
-    case 'LEAVE_GROUP':
-      return {
-        ...state,
-        groups: state.groups.map((g) =>
-          g.id === action.groupId
-            ? { ...g, memberIds: g.memberIds.filter((id) => id !== VIEWER_ID) }
-            : g,
-        ),
+        authLoading: false,
+        authError: null,
+        accessToken: null,
+        currentUser: null,
+        demoMode: true,
+        profile: DEMO_PROFILE,
+        groups: seedGroups.map(groupFromDemo),
+        sessions: seedSessions.map(sessionFromDemo),
+        groupsLoading: false,
+        groupsError: null,
+        sessionsLoading: false,
+        sessionsError: null,
       }
 
     case 'SET_RSVP':
@@ -162,9 +434,6 @@ function reducer(state: AppState, action: Action): AppState {
     case 'SET_TYPING':
       return { ...state, typingIn: action.groupId }
 
-    case 'CREATE_GROUP':
-      return { ...state, groups: [action.group, ...state.groups] }
-
     case 'CREATE_SESSION':
       return { ...state, sessions: [...state.sessions, action.session] }
 
@@ -193,7 +462,7 @@ const nextId = (prefix: string) => `${prefix}${++idSeq}`
 
 export type NewGroupInput = {
   name: string
-  courseCode: string
+  courseId: string
   description: string
   purpose: GroupPurpose
   meetingStyle: MeetingStyle
@@ -214,16 +483,29 @@ export type NewSessionInput = {
 
 type AppApi = {
   state: AppState
-  signIn: (input?: { email?: string; name?: string }) => void
-  signOut: () => void
+  login: (input: { email: string; password: string }) => Promise<CurrentUser>
+  signup: (input: { name: string; email: string; password: string }) => Promise<CurrentUser>
+  signOut: () => Promise<void>
   enterDemo: () => void
-  completeOnboarding: (input: { major: string; gradYear: number; courses: string[] }) => void
-  joinGroup: (groupId: string) => void
-  leaveGroup: (groupId: string) => void
-  setRsvp: (sessionId: string, status: RsvpStatus) => void
+  completeOnboarding: (input: {
+    name?: string
+    major: string
+    gradYear: number
+    courseCodes: string[]
+  }) => Promise<CurrentUser>
+  refreshGroups: () => Promise<void>
+  refreshCourseGroups: (courseId: string) => Promise<void>
+  refreshMyGroups: () => Promise<void>
+  refreshGroup: (groupId: string) => Promise<void>
+  refreshSessions: () => Promise<void>
+  refreshGroupSessions: (groupId: string) => Promise<void>
+  refreshSession: (sessionId: string) => Promise<void>
+  joinGroup: (groupId: string) => Promise<void>
+  leaveGroup: (groupId: string) => Promise<void>
+  setRsvp: (sessionId: string, status: RsvpStatus) => Promise<void>
   sendMessage: (groupId: string, body: string) => void
-  createGroup: (input: NewGroupInput) => string
-  createSession: (input: NewSessionInput) => string
+  createGroup: (input: NewGroupInput) => Promise<string>
+  createSession: (input: NewSessionInput) => Promise<string>
   markGroupRead: (groupId: string) => void
   markNotificationsRead: () => void
 }
@@ -235,6 +517,95 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const stateRef = React.useRef(state)
   stateRef.current = state
 
+  React.useEffect(() => {
+    let active = true
+
+    api
+      .listCourses()
+      .then(({ courses }) => {
+        if (active) dispatch({ type: 'COURSES_SUCCESS', courses })
+      })
+      .catch((error) => {
+        if (!active) return
+        dispatch({
+          type: 'COURSES_FAILURE',
+          message: error instanceof Error ? error.message : 'Could not load courses',
+        })
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  React.useEffect(() => {
+    let active = true
+
+    api
+      .refresh()
+      .then(({ user, accessToken }) => {
+        if (active) dispatch({ type: 'AUTH_SUCCESS', user, accessToken })
+      })
+      .catch(() => {
+        if (active) dispatch({ type: 'AUTH_FAILURE' })
+      })
+
+    return () => {
+      active = false
+    }
+  }, [])
+
+  React.useEffect(() => {
+    if (!state.accessToken || state.demoMode) return
+    let active = true
+
+    dispatch({ type: 'GROUPS_LOADING', loading: true })
+    api
+      .listStudyGroups(state.accessToken)
+      .then(({ studyGroups }) => {
+        if (active) dispatch({ type: 'GROUPS_SUCCESS', groups: studyGroups.map(groupFromApi) })
+      })
+      .catch((error) => {
+        if (!active) return
+        dispatch({
+          type: 'GROUPS_FAILURE',
+          message: error instanceof Error ? error.message : 'Could not load study groups',
+        })
+      })
+
+    return () => {
+      active = false
+    }
+  }, [state.accessToken, state.demoMode])
+
+  React.useEffect(() => {
+    if (!state.accessToken || state.demoMode) return
+    let active = true
+
+    dispatch({ type: 'SESSIONS_LOADING', loading: true })
+    api
+      .listMySessions(state.accessToken)
+      .then(({ studySessions }) => {
+        if (active) {
+          dispatch({
+            type: 'SESSIONS_SUCCESS',
+            sessions: studySessions.map(sessionFromApi),
+          })
+        }
+      })
+      .catch((error) => {
+        if (!active) return
+        dispatch({
+          type: 'SESSIONS_FAILURE',
+          message: error instanceof Error ? error.message : 'Could not load sessions',
+        })
+      })
+
+    return () => {
+      active = false
+    }
+  }, [state.accessToken, state.demoMode])
+
   /* Timers for the scripted chat reply; cleared if the provider unmounts. */
   const timers = React.useRef<ReturnType<typeof setTimeout>[]>([])
   React.useEffect(() => {
@@ -242,7 +613,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return () => pending.forEach(clearTimeout)
   }, [])
 
-  const api = React.useMemo<AppApi>(() => {
+  const appApi = React.useMemo<AppApi>(() => {
     const later = (fn: () => void, ms: number) => {
       timers.current.push(setTimeout(fn, ms))
     }
@@ -250,32 +621,247 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     return {
       state,
 
-      signIn: (input) => dispatch({ type: 'SIGN_IN', ...input }),
-      signOut: () => dispatch({ type: 'SIGN_OUT' }),
+      login: async (input) => {
+        const { user, accessToken } = await api.login(input)
+        dispatch({ type: 'AUTH_SUCCESS', user, accessToken })
+        return user
+      },
+
+      signup: async (input) => {
+        const { user, accessToken } = await api.signup(input)
+        dispatch({ type: 'AUTH_SUCCESS', user, accessToken })
+        return user
+      },
+
+      signOut: async () => {
+        if (!stateRef.current.demoMode) {
+          await api.logout().catch(() => undefined)
+        }
+        dispatch({ type: 'SIGN_OUT' })
+      },
+
       enterDemo: () => dispatch({ type: 'ENTER_DEMO' }),
-      completeOnboarding: (input) => dispatch({ type: 'COMPLETE_ONBOARDING', ...input }),
 
-      joinGroup: (groupId) => {
-        const group = stateRef.current.groups.find((g) => g.id === groupId)
-        dispatch({ type: 'JOIN_GROUP', groupId })
-        if (group) toast.success(`Joined ${group.name}`)
+      completeOnboarding: async (input) => {
+        const token = stateRef.current.accessToken
+        if (!token) throw new Error('Authentication required')
+
+        const { user } = await api.completeOnboarding(token, input)
+        dispatch({ type: 'AUTH_SUCCESS', user, accessToken: token })
+        return user
       },
 
-      leaveGroup: (groupId) => {
-        const group = stateRef.current.groups.find((g) => g.id === groupId)
-        dispatch({ type: 'LEAVE_GROUP', groupId })
-        if (group) toast(`Left ${group.name}`)
+      refreshGroups: async () => {
+        const token = stateRef.current.accessToken
+        if (!token || stateRef.current.demoMode) return
+
+        dispatch({ type: 'GROUPS_LOADING', loading: true })
+        try {
+          const { studyGroups } = await api.listStudyGroups(token)
+          dispatch({ type: 'GROUPS_SUCCESS', groups: studyGroups.map(groupFromApi) })
+        } catch (error) {
+          dispatch({
+            type: 'GROUPS_FAILURE',
+            message: error instanceof Error ? error.message : 'Could not load study groups',
+          })
+          throw error
+        }
       },
 
-      setRsvp: (sessionId, status) => {
-        dispatch({ type: 'SET_RSVP', sessionId, status })
-        toast.success(
-          status === 'going'
-            ? "You're going"
-            : status === 'maybe'
-              ? 'Marked as maybe'
-              : 'Marked as not going',
-        )
+      refreshCourseGroups: async (courseId) => {
+        const token = stateRef.current.accessToken
+        if (!token || stateRef.current.demoMode) return
+
+        try {
+          const { studyGroups } = await api.listCourseStudyGroups(token, courseId)
+          dispatch({ type: 'UPSERT_GROUPS', groups: studyGroups.map(groupFromApi) })
+        } catch (error) {
+          dispatch({
+            type: 'GROUPS_FAILURE',
+            message: error instanceof Error ? error.message : 'Could not load course groups',
+          })
+          throw error
+        }
+      },
+
+      refreshMyGroups: async () => {
+        const token = stateRef.current.accessToken
+        if (!token || stateRef.current.demoMode) return
+
+        try {
+          const { studyGroups } = await api.listMyStudyGroups(token)
+          dispatch({ type: 'UPSERT_GROUPS', groups: studyGroups.map(groupFromApi) })
+        } catch (error) {
+          dispatch({
+            type: 'GROUPS_FAILURE',
+            message: error instanceof Error ? error.message : 'Could not load your study groups',
+          })
+          throw error
+        }
+      },
+
+      refreshGroup: async (groupId) => {
+        const token = stateRef.current.accessToken
+        if (!token || stateRef.current.demoMode) return
+
+        try {
+          const { studyGroup } = await api.getStudyGroup(token, groupId)
+          dispatch({ type: 'UPSERT_GROUP', group: groupFromApi(studyGroup) })
+        } catch (error) {
+          dispatch({
+            type: 'GROUPS_FAILURE',
+            message: error instanceof Error ? error.message : 'Could not load study group',
+          })
+          throw error
+        }
+      },
+
+      refreshSessions: async () => {
+        const token = stateRef.current.accessToken
+        if (!token || stateRef.current.demoMode) return
+
+        dispatch({ type: 'SESSIONS_LOADING', loading: true })
+        try {
+          const { studySessions } = await api.listMySessions(token)
+          dispatch({
+            type: 'SESSIONS_SUCCESS',
+            sessions: studySessions.map(sessionFromApi),
+          })
+        } catch (error) {
+          dispatch({
+            type: 'SESSIONS_FAILURE',
+            message: error instanceof Error ? error.message : 'Could not load sessions',
+          })
+          throw error
+        }
+      },
+
+      refreshGroupSessions: async (groupId) => {
+        const token = stateRef.current.accessToken
+        if (!token || stateRef.current.demoMode) return
+
+        dispatch({ type: 'SESSIONS_LOADING', loading: true })
+        try {
+          const { studySessions } = await api.listGroupSessions(token, groupId)
+          dispatch({
+            type: 'UPSERT_SESSIONS',
+            sessions: studySessions.map(sessionFromApi),
+          })
+        } catch (error) {
+          dispatch({
+            type: 'SESSIONS_FAILURE',
+            message: error instanceof Error ? error.message : 'Could not load group sessions',
+          })
+          throw error
+        }
+      },
+
+      refreshSession: async (sessionId) => {
+        const token = stateRef.current.accessToken
+        if (!token || stateRef.current.demoMode) return
+
+        dispatch({ type: 'SESSIONS_LOADING', loading: true })
+        try {
+          const { studySession } = await api.getSession(token, sessionId)
+          dispatch({ type: 'UPSERT_SESSION', session: sessionFromApi(studySession) })
+        } catch (error) {
+          dispatch({
+            type: 'SESSIONS_FAILURE',
+            message: error instanceof Error ? error.message : 'Could not load session',
+          })
+          throw error
+        }
+      },
+
+      joinGroup: async (groupId) => {
+        const group = stateRef.current.groups.find((g) => g.id === groupId)
+        if (stateRef.current.demoMode) {
+          if (group) {
+            const memberIds = group.memberIds ?? group.members?.map((member) => member.id) ?? []
+            if (!memberIds.includes(VIEWER_ID)) {
+              dispatch({
+                type: 'UPSERT_GROUP',
+                group: groupFromDemo({ ...group, memberIds: [...memberIds, VIEWER_ID] }),
+              })
+            }
+          }
+          toast.success(group ? `Joined ${group.name}` : 'Joined group')
+          return
+        }
+
+        const token = stateRef.current.accessToken
+        if (!token) throw new Error('Authentication required')
+
+        try {
+          const { studyGroup } = await api.joinStudyGroup(token, groupId)
+          dispatch({ type: 'UPSERT_GROUP', group: groupFromApi(studyGroup) })
+          toast.success(`Joined ${studyGroup.name}`)
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : 'Could not join group')
+          throw error
+        }
+      },
+
+      leaveGroup: async (groupId) => {
+        const group = stateRef.current.groups.find((g) => g.id === groupId)
+        if (stateRef.current.demoMode) {
+          if (group) {
+            const memberIds = group.memberIds ?? group.members?.map((member) => member.id) ?? []
+            dispatch({
+              type: 'UPSERT_GROUP',
+              group: groupFromDemo({
+                ...group,
+                memberIds: memberIds.filter((id) => id !== VIEWER_ID),
+              }),
+            })
+          }
+          toast(group ? `Left ${group.name}` : 'Left group')
+          return
+        }
+
+        const token = stateRef.current.accessToken
+        if (!token) throw new Error('Authentication required')
+
+        try {
+          const { studyGroup } = await api.leaveStudyGroup(token, groupId)
+          dispatch({ type: 'UPSERT_GROUP', group: groupFromApi(studyGroup) })
+          toast(`Left ${studyGroup.name}`)
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : 'Could not leave group')
+          throw error
+        }
+      },
+
+      setRsvp: async (sessionId, status) => {
+        if (stateRef.current.demoMode) {
+          dispatch({ type: 'SET_RSVP', sessionId, status })
+          toast.success(
+            status === 'going'
+              ? "You're going"
+              : status === 'maybe'
+                ? 'Marked as maybe'
+                : 'Marked as not going',
+          )
+          return
+        }
+
+        const token = stateRef.current.accessToken
+        if (!token) throw new Error('Authentication required')
+
+        try {
+          const { studySession } = await api.setSessionRsvp(token, sessionId, status)
+          dispatch({ type: 'UPSERT_SESSION', session: sessionFromApi(studySession) })
+          toast.success(
+            status === 'going'
+              ? "You're going"
+              : status === 'maybe'
+                ? 'Marked as maybe'
+                : 'Marked as not going',
+          )
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : 'Could not update RSVP')
+          throw error
+        }
       },
 
       /* Optimistic send, then a scripted member reply so the chat screen
@@ -294,7 +880,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
         const group = stateRef.current.groups.find((g) => g.id === groupId)
         if (!group) return
-        const others = group.memberIds.filter((id) => id !== VIEWER_ID)
+        const memberIds = group.members?.map((member) => member.id) ?? group.memberIds ?? []
+        const others = memberIds.filter((id) => id !== VIEWER_ID)
         const reply = nextReply(groupId, others, stateRef.current.replyTurn[groupId] ?? 0)
         if (!reply) return
 
@@ -315,43 +902,92 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         )
       },
 
-      createGroup: (input) => {
-        const id = nextId('g')
-        dispatch({
-          type: 'CREATE_GROUP',
-          group: {
-            id,
-            ...input,
-            memberIds: [VIEWER_ID],
-            creatorId: VIEWER_ID,
-            createdAt: new Date().toISOString(),
-          },
-        })
-        toast.success(`${input.name} created`)
-        return id
+      createGroup: async (input) => {
+        if (stateRef.current.demoMode) {
+          const id = nextId('g')
+          const course = stateRef.current.courses.find((item) => item.id === input.courseId)
+          dispatch({
+            type: 'UPSERT_GROUP',
+            group: groupFromDemo({
+              id,
+              name: input.name,
+              courseId: input.courseId,
+              courseCode: course?.code ?? 'CS 2308',
+              description: input.description,
+              purpose: input.purpose,
+              meetingStyle: input.meetingStyle,
+              maxMembers: input.maxMembers,
+              memberIds: [VIEWER_ID],
+              creatorId: VIEWER_ID,
+              createdAt: new Date().toISOString(),
+            }),
+          })
+          toast.success(`${input.name} created`)
+          return id
+        }
+
+        const token = stateRef.current.accessToken
+        if (!token) throw new Error('Authentication required')
+
+        try {
+          const { studyGroup } = await api.createStudyGroup(token, input)
+          dispatch({ type: 'UPSERT_GROUP', group: groupFromApi(studyGroup) })
+          toast.success(`${studyGroup.name} created`)
+          return studyGroup.id
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : 'Could not create group')
+          throw error
+        }
       },
 
-      createSession: (input) => {
-        const id = nextId('s')
-        dispatch({
-          type: 'CREATE_SESSION',
-          session: {
-            id,
-            groupId: input.groupId,
+      createSession: async (input) => {
+        const endsAt = plusMinutes(input.startsAt, input.durationMinutes)
+
+        if (stateRef.current.demoMode) {
+          const id = nextId('s')
+          dispatch({
+            type: 'CREATE_SESSION',
+            session: sessionFromDemo({
+              id,
+              groupId: input.groupId,
+              title: input.title,
+              description: input.description,
+              startsAt: input.startsAt,
+              endsAt,
+              mode: input.mode,
+              location: input.location,
+              locationDetail: input.locationDetail,
+              meetingLink: input.meetingLink,
+              organizerId: VIEWER_ID,
+              rsvps: { [VIEWER_ID]: 'going' },
+              createdAt: new Date().toISOString(),
+            }),
+          })
+          toast.success('Session scheduled')
+          return id
+        }
+
+        const token = stateRef.current.accessToken
+        if (!token) throw new Error('Authentication required')
+
+        try {
+          const { studySession } = await api.createStudySession(token, input.groupId, {
             title: input.title,
             description: input.description,
             startsAt: input.startsAt,
-            endsAt: plusMinutes(input.startsAt, input.durationMinutes),
+            endsAt,
             mode: input.mode,
             location: input.location,
             locationDetail: input.locationDetail,
             meetingLink: input.meetingLink,
-            organizerId: VIEWER_ID,
-            rsvps: { [VIEWER_ID]: 'going' },
-          },
-        })
-        toast.success('Session scheduled')
-        return id
+          })
+          dispatch({ type: 'UPSERT_SESSION', session: sessionFromApi(studySession) })
+          toast.success('Session scheduled')
+          return studySession.id
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : 'Could not schedule session')
+          throw error
+        }
       },
 
       markGroupRead: (groupId) => dispatch({ type: 'MARK_GROUP_READ', groupId }),
@@ -359,7 +995,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state])
 
-  return <AppContext.Provider value={api}>{children}</AppContext.Provider>
+  return <AppContext.Provider value={appApi}>{children}</AppContext.Provider>
 }
 
 export function useApp() {

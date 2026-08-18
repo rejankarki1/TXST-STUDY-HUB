@@ -1,4 +1,4 @@
-import type * as React from 'react'
+import * as React from 'react'
 import { Link, useParams } from 'react-router-dom'
 import {
   ArrowLeft,
@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/Avatar'
 import { EmptyState } from '@/components/primitives'
 import { peopleById } from '@/data/people'
-import { courseSlug } from '@/data/courses'
+import { courseSlug } from '@/lib/courses'
 import { fullDate, isPast, timeRange } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/state/AppState'
@@ -34,7 +34,38 @@ export default function SessionDetail() {
   const { sessionId } = useParams()
   const session = useSession(sessionId)
   const group = useGroup(session?.groupId)
-  const { setRsvp } = useApp()
+  const { state, setRsvp, refreshSession } = useApp()
+
+  React.useEffect(() => {
+    if (!sessionId) return
+    void refreshSession(sessionId)
+  }, [sessionId])
+
+  if (state.sessionsLoading) {
+    return (
+      <Page>
+        <EmptyState
+          icon={CalendarX}
+          title="Loading session"
+          description="Fetching the latest RSVP details."
+        />
+      </Page>
+    )
+  }
+
+  if (state.sessionsError && !session) {
+    return (
+      <Page>
+        <EmptyState
+          icon={CalendarX}
+          title="Session could not load"
+          description={state.sessionsError}
+          actionLabel="Your sessions"
+          to="/sessions"
+        />
+      </Page>
+    )
+  }
 
   if (!session || !group) {
     return (
@@ -55,7 +86,7 @@ export default function SessionDetail() {
   const past = isPast(session.startsAt)
   const going = rsvpPeople(session, 'going')
   const maybe = rsvpPeople(session, 'maybe')
-  const organizer = peopleById[session.organizerId]
+  const organizer = session.organizer ?? peopleById[session.organizerId]
   const online = session.mode === 'online'
 
   return (
@@ -174,7 +205,7 @@ export default function SessionDetail() {
               mine={mine}
               groupId={group.id}
               groupName={group.name}
-              onChange={(status) => setRsvp(session.id, status)}
+              onChange={(status) => void setRsvp(session.id, status)}
             />
           </div>
 
@@ -236,7 +267,7 @@ export default function SessionDetail() {
           mine={mine}
           groupId={group.id}
           groupName={group.name}
-          onChange={(status) => setRsvp(session.id, status)}
+          onChange={(status) => void setRsvp(session.id, status)}
           compact
         />
       </div>

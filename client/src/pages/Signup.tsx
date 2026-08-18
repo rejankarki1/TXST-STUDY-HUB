@@ -1,5 +1,6 @@
 import * as React from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
 import { useApp } from '@/state/AppState'
@@ -8,7 +9,7 @@ import { AuthLayout } from './auth/AuthLayout'
 type Errors = Partial<Record<'name' | 'email' | 'password' | 'confirm', string>>
 
 export default function Signup() {
-  const { signIn } = useApp()
+  const { signup } = useApp()
   const navigate = useNavigate()
   const [values, setValues] = React.useState({
     name: '',
@@ -17,12 +18,13 @@ export default function Signup() {
     confirm: '',
   })
   const [errors, setErrors] = React.useState<Errors>({})
+  const [submitting, setSubmitting] = React.useState(false)
 
   const set = (key: keyof typeof values) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setValues((v) => ({ ...v, [key]: e.target.value }))
 
   /* Validation runs on submit only — nothing shouts at you mid-typing. */
-  function submit(e: React.FormEvent) {
+  async function submit(e: React.FormEvent) {
     e.preventDefault()
     const next: Errors = {}
     if (!values.name.trim()) next.name = 'Enter your name'
@@ -35,8 +37,20 @@ export default function Signup() {
     setErrors(next)
     if (Object.keys(next).length) return
 
-    signIn({ name: values.name, email: values.email })
-    navigate('/onboarding')
+    setSubmitting(true)
+    try {
+      const user = await signup({
+        name: values.name.trim(),
+        email: values.email.trim(),
+        password: values.password,
+      })
+
+      navigate(user.onboardingCompleted ? '/home' : '/onboarding')
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Signup failed')
+    } finally {
+      setSubmitting(false)
+    }
   }
 
   return (
@@ -106,8 +120,8 @@ export default function Signup() {
           />
         </Field>
 
-        <Button type="submit" variant="primary" size="lg" className="w-full">
-          Create account
+        <Button type="submit" variant="primary" size="lg" className="w-full" disabled={submitting}>
+          {submitting ? 'Creating account...' : 'Create account'}
         </Button>
       </form>
     </AuthLayout>

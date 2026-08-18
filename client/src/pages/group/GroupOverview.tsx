@@ -66,13 +66,13 @@ export default function GroupOverview() {
             <div>
               <dt className="text-muted-foreground">Size</dt>
               <dd className="mt-0.5 font-medium text-foreground">
-                {members.length} of {group.maxMembers}
+                {group.memberCount ?? members.length} of {group.maxMembers}
               </dd>
             </div>
             <div>
               <dt className="text-muted-foreground">Started by</dt>
               <dd className="mt-0.5 font-medium text-foreground">
-                {peopleById[group.creatorId]?.name.split(' ')[0] ?? 'A student'}
+                {group.creator?.name.split(' ')[0] ?? peopleById[group.creatorId]?.name.split(' ')[0] ?? 'A student'}
               </dd>
             </div>
           </dl>
