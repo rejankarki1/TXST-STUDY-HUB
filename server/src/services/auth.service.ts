@@ -18,9 +18,25 @@ type SafeUser = {
   role: UserRole;
 };
 
+type CurrentUser = SafeUser & {
+  major: string | null;
+  gradYear: number | null;
+  onboardingCompleted: boolean;
+  courses: {
+    id: string;
+    code: string;
+    title: string;
+    department: {
+      id: string;
+      code: string;
+      name: string;
+    } | null;
+  }[];
+};
+
 type AuthSuccess = {
   ok: true;
-  user: SafeUser;
+  user: CurrentUser;
   accessToken: string;
   refreshToken: string;
 };
@@ -39,6 +55,81 @@ function toSafeUser(user: SafeUser): SafeUser {
     name: user.name,
     role: user.role,
   };
+}
+
+const currentUserSelect = {
+  id: true,
+  email: true,
+  name: true,
+  role: true,
+  major: true,
+  gradYear: true,
+  onboardingCompleted: true,
+  selectedCourses: {
+    orderBy: {
+      createdAt: "asc" as const,
+    },
+    select: {
+      course: {
+        select: {
+          id: true,
+          code: true,
+          title: true,
+          department: {
+            select: {
+              id: true,
+              code: true,
+              name: true,
+            },
+          },
+        },
+      },
+    },
+  },
+};
+
+function toCurrentUser(user: {
+  id: string;
+  email: string;
+  name: string | null;
+  role: UserRole;
+  major: string | null;
+  gradYear: number | null;
+  onboardingCompleted: boolean;
+  selectedCourses: {
+    course: {
+      id: string;
+      code: string;
+      title: string;
+      department: {
+        id: string;
+        code: string;
+        name: string;
+      } | null;
+    };
+  }[];
+}): CurrentUser {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    role: user.role,
+    major: user.major,
+    gradYear: user.gradYear,
+    onboardingCompleted: user.onboardingCompleted,
+    courses: user.selectedCourses.map(({ course }) => course),
+  };
+}
+
+export async function getCurrentUser(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: {
+      id: userId,
+    },
+    select: currentUserSelect,
+  });
+
+  return user ? toCurrentUser(user) : null;
 }
 
 async function createStoredRefreshToken(userId: string) {
@@ -93,10 +184,15 @@ export async function signupUser(input: {
 
   const refreshToken = await createStoredRefreshToken(user.id);
   const accessToken = createAccessToken(user);
+  const currentUser = await getCurrentUser(user.id);
+
+  if (!currentUser) {
+    throw new Error("Created user could not be loaded");
+  }
 
   return {
     ok: true,
-    user: toSafeUser(user),
+    user: currentUser,
     accessToken,
     refreshToken,
   };
@@ -133,10 +229,15 @@ export async function loginUser(input: {
 
   const refreshToken = await createStoredRefreshToken(user.id);
   const accessToken = createAccessToken(user);
+  const currentUser = await getCurrentUser(user.id);
+
+  if (!currentUser) {
+    throw new Error("Authenticated user could not be loaded");
+  }
 
   return {
     ok: true,
-    user: toSafeUser(user),
+    user: currentUser,
     accessToken,
     refreshToken,
   };
@@ -199,12 +300,22 @@ export async function refreshAuthSession(
     }),
   ]);
 
-  const user = toSafeUser(storedToken.user);
-  const accessToken = createAccessToken(user);
+  const safeUser = toSafeUser(storedToken.user);
+  const accessToken = createAccessToken(safeUser);
+  const currentUser = await getCurrentUser(storedToken.userId);
+
+  if (!currentUser) {
+    return {
+      ok: false,
+      status: 401,
+      message: "Authentication required",
+      clearCookie: true,
+    };
+  }
 
   return {
     ok: true,
-    user,
+    user: currentUser,
     accessToken,
     refreshToken: newRefreshToken,
   };
@@ -220,4 +331,87 @@ export async function logoutUser(refreshToken: string | undefined) {
       tokenHash: hashRefreshToken(refreshToken),
     },
   });
+}
+
+export async function completeOnboarding(
+  userId: string,
+  input: {
+    name?: string;
+    major: string;
+    gradYear: number;
+    courseCodes: string[];
+  },
+) {
+  const uniqueCourseCodes = [...new Set(input.courseCodes)];
+
+  if (uniqueCourseCodes.length !== input.courseCodes.length) {
+    return {
+      ok: false as const,
+      status: 400,
+      message: "Duplicate courses are not allowed",
+    };
+  }
+
+  const courses = await prisma.course.findMany({
+    where: {
+      code: {
+        in: uniqueCourseCodes,
+      },
+    },
+    select: {
+      id: true,
+      code: true,
+    },
+  });
+
+  if (courses.length !== uniqueCourseCodes.length) {
+    const foundCodes = new Set(courses.map((course) => course.code));
+    const missingCodes = uniqueCourseCodes.filter((code) => !foundCodes.has(code));
+
+    return {
+      ok: false as const,
+      status: 400,
+      message: `Course not found: ${missingCodes.join(", ")}`,
+    };
+  }
+
+  await prisma.$transaction([
+    prisma.user.update({
+      where: {
+        id: userId,
+      },
+      data: {
+        name: input.name,
+        major: input.major,
+        gradYear: input.gradYear,
+        onboardingCompleted: true,
+      },
+    }),
+    prisma.userCourse.deleteMany({
+      where: {
+        userId,
+      },
+    }),
+    prisma.userCourse.createMany({
+      data: courses.map((course) => ({
+        userId,
+        courseId: course.id,
+      })),
+    }),
+  ]);
+
+  const user = await getCurrentUser(userId);
+
+  if (!user) {
+    return {
+      ok: false as const,
+      status: 404,
+      message: "User not found",
+    };
+  }
+
+  return {
+    ok: true as const,
+    user,
+  };
 }

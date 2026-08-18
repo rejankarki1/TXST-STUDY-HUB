@@ -52,7 +52,7 @@ router.post(
   validateBody(createResourceSchema, "Invalid resource data"),
   createResource,
 );
-router.get("/:courseId/study-groups", listCourseStudyGroups);
+router.get("/:courseId/study-groups", requireAuth, listCourseStudyGroups);
 router.post(
   "/:courseId/study-groups",
   requireAuth,

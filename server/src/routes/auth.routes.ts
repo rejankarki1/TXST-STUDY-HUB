@@ -1,14 +1,20 @@
 import { Router } from "express";
 
 import {
+  completeOnboarding,
   login,
   logout,
+  me,
   refresh,
   signup,
 } from "../controllers/auth.controller.js";
 import { requireAuth } from "../middleware/auth.middleware.js";
 import { validateBody } from "../middleware/validate.middleware.js";
-import { loginSchema, signupSchema } from "../schemas/auth.schema.js";
+import {
+  completeOnboardingSchema,
+  loginSchema,
+  signupSchema,
+} from "../schemas/auth.schema.js";
 
 const router = Router();
 
@@ -24,12 +30,11 @@ router.post(
 );
 router.post("/refresh", refresh);
 router.post("/logout", logout);
-router.get("/me", requireAuth, (req, res) => {
-  res.json({
-    success: true,
-    data: {
-      user: req.user,
-    },
-  });
-});
+router.post(
+  "/onboarding",
+  requireAuth,
+  validateBody(completeOnboardingSchema, "Invalid onboarding data"),
+  completeOnboarding,
+);
+router.get("/me", requireAuth, me);
 export default router;

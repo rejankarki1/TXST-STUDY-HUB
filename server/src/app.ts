@@ -13,6 +13,7 @@ import experiencesRoutes from "./routes/experiences.routes.js";
 import homeRoutes from "./routes/home.routes.js";
 import questionsRoutes from "./routes/questions.routes.js";
 import resourcesRoutes from "./routes/resources.routes.js";
+import sessionsRoutes from "./routes/sessions.routes.js";
 import studyGroupsRoutes from "./routes/study-groups.routes.js";
 
 const app = express();
@@ -54,6 +55,7 @@ app.use("/api/courses", coursesRoutes);
 app.use("/api/experiences", experiencesRoutes);
 app.use("/api/questions", questionsRoutes);
 app.use("/api/resources", resourcesRoutes);
+app.use("/api/sessions", sessionsRoutes);
 app.use("/api/study-groups", studyGroupsRoutes);
 
 app.use(notFoundHandler);

@@ -1,19 +1,53 @@
 import { prisma } from "../config/prisma.js";
 import {
-  StudyGroupMode,
-  StudyGroupStatus,
+  GroupPurpose,
+  MeetingStyle,
 } from "../generated/prisma/enums.js";
+
+export type FrontendGroupPurpose =
+  | "Exam prep"
+  | "Homework"
+  | "Weekly studying"
+  | "Project work"
+  | "General study";
+
+export type FrontendMeetingStyle = "in-person" | "online" | "flexible";
+
+const purposeToPrisma = {
+  "Exam prep": GroupPurpose.EXAM_PREP,
+  Homework: GroupPurpose.HOMEWORK,
+  "Weekly studying": GroupPurpose.WEEKLY_STUDYING,
+  "Project work": GroupPurpose.PROJECT_WORK,
+  "General study": GroupPurpose.GENERAL_STUDY,
+} satisfies Record<FrontendGroupPurpose, GroupPurpose>;
+
+const purposeFromPrisma = {
+  [GroupPurpose.EXAM_PREP]: "Exam prep",
+  [GroupPurpose.HOMEWORK]: "Homework",
+  [GroupPurpose.WEEKLY_STUDYING]: "Weekly studying",
+  [GroupPurpose.PROJECT_WORK]: "Project work",
+  [GroupPurpose.GENERAL_STUDY]: "General study",
+} satisfies Record<GroupPurpose, FrontendGroupPurpose>;
+
+const meetingStyleToPrisma = {
+  "in-person": MeetingStyle.IN_PERSON,
+  online: MeetingStyle.ONLINE,
+  flexible: MeetingStyle.FLEXIBLE,
+} satisfies Record<FrontendMeetingStyle, MeetingStyle>;
+
+const meetingStyleFromPrisma = {
+  [MeetingStyle.IN_PERSON]: "in-person",
+  [MeetingStyle.ONLINE]: "online",
+  [MeetingStyle.FLEXIBLE]: "flexible",
+} satisfies Record<MeetingStyle, FrontendMeetingStyle>;
 
 export const studyGroupSelect = {
   id: true,
-  title: true,
+  name: true,
   description: true,
-  startDateTime: true,
-  mode: true,
-  location: true,
-  onlineDetails: true,
+  purpose: true,
+  meetingStyle: true,
   maxMembers: true,
-  status: true,
   courseId: true,
   creatorId: true,
   createdAt: true,
@@ -37,7 +71,8 @@ export const studyGroupSelect = {
     select: {
       id: true,
       name: true,
-      email: true,
+      major: true,
+      gradYear: true,
     },
   },
   members: {
@@ -47,11 +82,13 @@ export const studyGroupSelect = {
     select: {
       id: true,
       joinedAt: true,
+      lastReadAt: true,
       user: {
         select: {
           id: true,
           name: true,
-          email: true,
+          major: true,
+          gradYear: true,
         },
       },
     },
@@ -63,15 +100,115 @@ export const studyGroupSelect = {
   },
 };
 
+type SelectedStudyGroup = Awaited<
+  ReturnType<typeof prisma.studyGroup.findFirst<{ select: typeof studyGroupSelect }>>
+>;
+
 export type CreateStudyGroupInput = {
-  title: string;
+  name: string;
   description: string;
-  startDateTime: string;
-  mode: StudyGroupMode;
-  location?: string;
-  onlineDetails?: string;
+  purpose: FrontendGroupPurpose;
+  meetingStyle: FrontendMeetingStyle;
   maxMembers: number;
 };
+
+export function formatStudyGroup(
+  studyGroup: NonNullable<SelectedStudyGroup>,
+  currentUserId?: string,
+) {
+  const memberCount = studyGroup._count.members;
+  const spotsLeft = Math.max(studyGroup.maxMembers - memberCount, 0);
+
+  return {
+    id: studyGroup.id,
+    name: studyGroup.name,
+    description: studyGroup.description,
+    purpose: purposeFromPrisma[studyGroup.purpose],
+    meetingStyle: meetingStyleFromPrisma[studyGroup.meetingStyle],
+    maxMembers: studyGroup.maxMembers,
+    courseId: studyGroup.courseId,
+    courseCode: studyGroup.course.code,
+    creatorId: studyGroup.creatorId,
+    createdAt: studyGroup.createdAt.toISOString(),
+    updatedAt: studyGroup.updatedAt.toISOString(),
+    course: studyGroup.course,
+    creator: studyGroup.creator,
+    members: studyGroup.members.map((member) => ({
+      id: member.user.id,
+      name: member.user.name ?? "Student",
+      major: member.user.major,
+      gradYear: member.user.gradYear,
+      joinedAt: member.joinedAt.toISOString(),
+    })),
+    memberCount,
+    spotsLeft,
+    isFull: memberCount >= studyGroup.maxMembers,
+    isMember: currentUserId
+      ? studyGroup.members.some((member) => member.user.id === currentUserId)
+      : false,
+    isCreator: currentUserId ? studyGroup.creatorId === currentUserId : false,
+  };
+}
+
+export async function listStudyGroups(input: {
+  currentUserId?: string;
+  courseId?: string;
+  search?: string;
+}) {
+  const search = input.search?.trim();
+  const studyGroups = await prisma.studyGroup.findMany({
+    where: {
+      courseId: input.courseId,
+      ...(search
+        ? {
+            OR: [
+              { name: { contains: search, mode: "insensitive" } },
+              { description: { contains: search, mode: "insensitive" } },
+              { course: { code: { contains: search, mode: "insensitive" } } },
+              { course: { title: { contains: search, mode: "insensitive" } } },
+            ],
+          }
+        : {}),
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    select: studyGroupSelect,
+  });
+
+  return studyGroups.map((studyGroup) =>
+    formatStudyGroup(studyGroup, input.currentUserId),
+  );
+}
+
+export async function listMyStudyGroups(userId: string) {
+  const studyGroups = await prisma.studyGroup.findMany({
+    where: {
+      members: {
+        some: {
+          userId,
+        },
+      },
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+    select: studyGroupSelect,
+  });
+
+  return studyGroups.map((studyGroup) => formatStudyGroup(studyGroup, userId));
+}
+
+export async function getStudyGroup(groupId: string, currentUserId?: string) {
+  const studyGroup = await prisma.studyGroup.findUnique({
+    where: {
+      id: groupId,
+    },
+    select: studyGroupSelect,
+  });
+
+  return studyGroup ? formatStudyGroup(studyGroup, currentUserId) : null;
+}
 
 export async function createStudyGroupForCourse(
   courseId: string,
@@ -98,15 +235,11 @@ export async function createStudyGroupForCourse(
 
     const studyGroup = await tx.studyGroup.create({
       data: {
-        title: input.title,
+        name: input.name,
         description: input.description,
-        startDateTime: new Date(input.startDateTime),
-        mode: input.mode,
-        location: input.mode === StudyGroupMode.IN_PERSON ? input.location : null,
-        onlineDetails:
-          input.mode === StudyGroupMode.ONLINE ? input.onlineDetails : null,
+        purpose: purposeToPrisma[input.purpose],
+        meetingStyle: meetingStyleToPrisma[input.meetingStyle],
         maxMembers: input.maxMembers,
-        status: StudyGroupStatus.OPEN,
         courseId,
         creatorId,
         members: {
@@ -120,7 +253,7 @@ export async function createStudyGroupForCourse(
 
     return {
       ok: true as const,
-      studyGroup,
+      studyGroup: formatStudyGroup(studyGroup, creatorId),
     };
   });
 }
@@ -134,7 +267,6 @@ export async function joinStudyGroup(groupId: string, userId: string) {
       select: {
         id: true,
         maxMembers: true,
-        status: true,
         _count: {
           select: {
             members: true,
@@ -171,32 +303,7 @@ export async function joinStudyGroup(groupId: string, userId: string) {
       };
     }
 
-    if (studyGroup.status === StudyGroupStatus.CANCELLED) {
-      return {
-        ok: false as const,
-        status: 409,
-        message: "This study group is cancelled",
-      };
-    }
-
-    if (studyGroup.status === StudyGroupStatus.FULL) {
-      return {
-        ok: false as const,
-        status: 409,
-        message: "This study group is full",
-      };
-    }
-
     if (studyGroup._count.members >= studyGroup.maxMembers) {
-      await tx.studyGroup.update({
-        where: {
-          id: groupId,
-        },
-        data: {
-          status: StudyGroupStatus.FULL,
-        },
-      });
-
       return {
         ok: false as const,
         status: 409,
@@ -211,25 +318,16 @@ export async function joinStudyGroup(groupId: string, userId: string) {
       },
     });
 
-    const memberCount = studyGroup._count.members + 1;
-    const status =
-      memberCount >= studyGroup.maxMembers
-        ? StudyGroupStatus.FULL
-        : StudyGroupStatus.OPEN;
-
-    const updatedStudyGroup = await tx.studyGroup.update({
+    const updatedStudyGroup = await tx.studyGroup.findUniqueOrThrow({
       where: {
         id: groupId,
-      },
-      data: {
-        status,
       },
       select: studyGroupSelect,
     });
 
     return {
       ok: true as const,
-      studyGroup: updatedStudyGroup,
+      studyGroup: formatStudyGroup(updatedStudyGroup, userId),
     };
   });
 }
@@ -243,7 +341,6 @@ export async function leaveStudyGroup(groupId: string, userId: string) {
       select: {
         id: true,
         creatorId: true,
-        maxMembers: true,
       },
     });
 
@@ -289,28 +386,16 @@ export async function leaveStudyGroup(groupId: string, userId: string) {
       },
     });
 
-    const memberCount = await tx.studyGroupMember.count({
-      where: {
-        studyGroupId: groupId,
-      },
-    });
-
-    const updatedStudyGroup = await tx.studyGroup.update({
+    const updatedStudyGroup = await tx.studyGroup.findUniqueOrThrow({
       where: {
         id: groupId,
-      },
-      data: {
-        status:
-          memberCount >= studyGroup.maxMembers
-            ? StudyGroupStatus.FULL
-            : StudyGroupStatus.OPEN,
       },
       select: studyGroupSelect,
     });
 
     return {
       ok: true as const,
-      studyGroup: updatedStudyGroup,
+      studyGroup: formatStudyGroup(updatedStudyGroup, userId),
     };
   });
 }

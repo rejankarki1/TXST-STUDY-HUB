@@ -1,6 +1,8 @@
 import type { RequestHandler } from "express";
 
 import {
+  completeOnboarding as completeOnboardingForUser,
+  getCurrentUser,
   loginUser,
   logoutUser,
   refreshAuthSession,
@@ -112,5 +114,68 @@ export const logout: RequestHandler = async (req, res) => {
   res.json({
     success: true,
     message: "Logout successful",
+  });
+};
+
+export const me: RequestHandler = async (req, res) => {
+  if (!req.user) {
+    res.status(401).json({
+      success: false,
+      message: "Authentication required",
+    });
+    return;
+  }
+
+  const user = await getCurrentUser(req.user.id);
+
+  if (!user) {
+    res.status(404).json({
+      success: false,
+      message: "User not found",
+    });
+    return;
+  }
+
+  res.json({
+    success: true,
+    data: {
+      user,
+    },
+  });
+};
+
+export const completeOnboarding: RequestHandler = async (req, res) => {
+  if (!req.user) {
+    res.status(401).json({
+      success: false,
+      message: "Authentication required",
+    });
+    return;
+  }
+
+  const result = await completeOnboardingForUser(
+    req.user.id,
+    req.body as {
+      name?: string;
+      major: string;
+      gradYear: number;
+      courseCodes: string[];
+    },
+  );
+
+  if (!result.ok) {
+    res.status(result.status).json({
+      success: false,
+      message: result.message,
+    });
+    return;
+  }
+
+  res.json({
+    success: true,
+    message: "Onboarding completed",
+    data: {
+      user: result.user,
+    },
   });
 };

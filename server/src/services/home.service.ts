@@ -115,13 +115,8 @@ export async function getHomeOverview() {
         },
       }),
       prisma.studyGroup.findMany({
-        where: {
-          startDateTime: {
-            gt: new Date(),
-          },
-        },
         orderBy: {
-          startDateTime: "asc",
+          createdAt: "desc",
         },
         take: 5,
         select: studyGroupSelect,

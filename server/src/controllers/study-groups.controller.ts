@@ -1,13 +1,56 @@
 import type { RequestHandler } from "express";
 
-import { prisma } from "../config/prisma.js";
-import type { StudyGroupMode } from "../generated/prisma/enums.js";
 import {
   createStudyGroupForCourse,
+  getStudyGroup,
   joinStudyGroup,
   leaveStudyGroup,
-  studyGroupSelect,
+  listMyStudyGroups,
+  listStudyGroups,
 } from "../services/study-groups.service.js";
+
+function currentUserId(req: Parameters<RequestHandler>[0]) {
+  return req.user?.id;
+}
+
+export const listStudyGroupsController: RequestHandler = async (req, res) => {
+  const courseId =
+    typeof req.query.courseId === "string" ? req.query.courseId : undefined;
+  const search =
+    typeof req.query.search === "string" ? req.query.search : undefined;
+
+  const studyGroups = await listStudyGroups({
+    currentUserId: currentUserId(req),
+    courseId,
+    search,
+  });
+
+  res.json({
+    success: true,
+    data: {
+      studyGroups,
+    },
+  });
+};
+
+export const listMyStudyGroupsController: RequestHandler = async (req, res) => {
+  if (!req.user) {
+    res.status(401).json({
+      success: false,
+      message: "Authentication required",
+    });
+    return;
+  }
+
+  const studyGroups = await listMyStudyGroups(req.user.id);
+
+  res.json({
+    success: true,
+    data: {
+      studyGroups,
+    },
+  });
+};
 
 export const listCourseStudyGroups: RequestHandler = async (req, res) => {
   const courseId = req.params.courseId;
@@ -20,34 +63,9 @@ export const listCourseStudyGroups: RequestHandler = async (req, res) => {
     return;
   }
 
-  const course = await prisma.course.findUnique({
-    where: {
-      id: courseId,
-    },
-    select: {
-      id: true,
-    },
-  });
-
-  if (!course) {
-    res.status(404).json({
-      success: false,
-      message: "Course not found",
-    });
-    return;
-  }
-
-  const studyGroups = await prisma.studyGroup.findMany({
-    where: {
-      courseId,
-      startDateTime: {
-        gte: new Date(),
-      },
-    },
-    orderBy: {
-      startDateTime: "asc",
-    },
-    select: studyGroupSelect,
+  const studyGroups = await listStudyGroups({
+    currentUserId: currentUserId(req),
+    courseId,
   });
 
   res.json({
@@ -59,15 +77,8 @@ export const listCourseStudyGroups: RequestHandler = async (req, res) => {
 };
 
 export const createStudyGroup: RequestHandler = async (req, res) => {
-  const courseId = req.params.courseId;
-
-  if (typeof courseId !== "string") {
-    res.status(404).json({
-      success: false,
-      message: "Course not found",
-    });
-    return;
-  }
+  const courseIdFromParams =
+    typeof req.params.courseId === "string" ? req.params.courseId : undefined;
 
   if (!req.user) {
     res.status(401).json({
@@ -78,30 +89,36 @@ export const createStudyGroup: RequestHandler = async (req, res) => {
   }
 
   const {
+    courseId: courseIdFromBody,
     description,
-    location,
     maxMembers,
-    mode,
-    onlineDetails,
-    startDateTime,
-    title,
+    meetingStyle,
+    name,
+    purpose,
   } = req.body as {
-    title: string;
+    courseId?: string;
+    name: string;
     description: string;
-    startDateTime: string;
-    mode: StudyGroupMode;
-    location?: string;
-    onlineDetails?: string;
+    purpose: "Exam prep" | "Homework" | "Weekly studying" | "Project work" | "General study";
+    meetingStyle: "in-person" | "online" | "flexible";
     maxMembers: number;
   };
 
+  const courseId = courseIdFromParams ?? courseIdFromBody;
+
+  if (!courseId) {
+    res.status(400).json({
+      success: false,
+      message: "Course is required",
+    });
+    return;
+  }
+
   const result = await createStudyGroupForCourse(courseId, req.user.id, {
-    title,
+    name,
     description,
-    startDateTime,
-    mode,
-    location,
-    onlineDetails,
+    purpose,
+    meetingStyle,
     maxMembers,
   });
 
@@ -133,12 +150,7 @@ export const getStudyGroupById: RequestHandler = async (req, res) => {
     return;
   }
 
-  const studyGroup = await prisma.studyGroup.findUnique({
-    where: {
-      id: groupId,
-    },
-    select: studyGroupSelect,
-  });
+  const studyGroup = await getStudyGroup(groupId, currentUserId(req));
 
   if (!studyGroup) {
     res.status(404).json({
@@ -152,6 +164,35 @@ export const getStudyGroupById: RequestHandler = async (req, res) => {
     success: true,
     data: {
       studyGroup,
+    },
+  });
+};
+
+export const listStudyGroupMembers: RequestHandler = async (req, res) => {
+  const groupId = req.params.groupId;
+
+  if (typeof groupId !== "string") {
+    res.status(404).json({
+      success: false,
+      message: "Study group not found",
+    });
+    return;
+  }
+
+  const studyGroup = await getStudyGroup(groupId, currentUserId(req));
+
+  if (!studyGroup) {
+    res.status(404).json({
+      success: false,
+      message: "Study group not found",
+    });
+    return;
+  }
+
+  res.json({
+    success: true,
+    data: {
+      members: studyGroup.members,
     },
   });
 };
