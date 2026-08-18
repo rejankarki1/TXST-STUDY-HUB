@@ -6,9 +6,9 @@ TXST Study Hub is a full-stack study collaboration app for Texas State students.
 
 - Existing repository history is preserved in this repo.
 - Frontend: redesigned React, TypeScript, Vite, Tailwind CSS app under client/.
-- Frontend data is currently mock/in-memory state while backend integration is planned.
-- Backend: existing Node.js, Express, TypeScript, Prisma, PostgreSQL API remains under server/.
-- Backend implementation for the redesigned group/session/chat UI is intentionally paused for the next planning phase.
+- Backend: Node.js, Express, TypeScript, Prisma, PostgreSQL API under server/.
+- PostgreSQL is now the source of truth for auth, profile/onboarding, selected courses, courses, study groups, memberships, study sessions, and RSVPs.
+- Group messages, unread state, and notifications are still mock/in-memory while the next backend checkpoint is planned.
 
 ## Frontend Features
 
@@ -21,6 +21,7 @@ TXST Study Hub is a full-stack study collaboration app for Texas State students.
 - Create group
 - Create session
 - RSVP controls
+- Real persisted group memberships, sessions, and RSVPs
 - Mock chat replies and typing state
 - Notifications UI
 - Profile and sign out
@@ -76,4 +77,4 @@ npm run dev
 
 ## Backend Planning Note
 
-The next backend phase should connect the redesigned frontend to real persistence using the existing Express + Prisma + PostgreSQL server instead of creating a separate project. The main data areas to plan are users/profile/onboarding, courses, groups, group memberships, sessions, RSVPs, messages, unread state, and notifications.
+The next backend phase should connect group messages and unread state using the existing Express + Prisma + PostgreSQL server. Notifications remain a later checkpoint.
