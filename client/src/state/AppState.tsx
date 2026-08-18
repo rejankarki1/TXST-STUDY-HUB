@@ -70,6 +70,7 @@ type Action =
   | { type: 'COURSES_LOADING'; loading: boolean }
   | { type: 'COURSES_SUCCESS'; courses: ApiCourse[] }
   | { type: 'COURSES_FAILURE'; message: string }
+  | { type: 'PROFILE_COURSES_SUCCESS'; courses: ApiCourse[] }
   | { type: 'GROUPS_LOADING'; loading: boolean }
   | { type: 'GROUPS_SUCCESS'; groups: Group[] }
   | { type: 'GROUPS_FAILURE'; message: string }
@@ -298,6 +299,19 @@ function reducer(state: AppState, action: Action): AppState {
         coursesError: action.message,
       }
 
+    case 'PROFILE_COURSES_SUCCESS':
+      return {
+        ...state,
+        currentUser: state.currentUser
+          ? { ...state.currentUser, courses: action.courses }
+          : state.currentUser,
+        profile: {
+          ...state.profile,
+          courses: action.courses.map((course) => course.code),
+          courseDetails: action.courses,
+        },
+      }
+
     case 'GROUPS_LOADING':
       return { ...state, groupsLoading: action.loading, groupsError: null }
 
@@ -500,6 +514,9 @@ type AppApi = {
   refreshSessions: () => Promise<void>
   refreshGroupSessions: (groupId: string) => Promise<void>
   refreshSession: (sessionId: string) => Promise<void>
+  refreshCurrentUser: () => Promise<CurrentUser>
+  addCourse: (courseId: string) => Promise<void>
+  removeCourse: (courseId: string) => Promise<void>
   joinGroup: (groupId: string) => Promise<void>
   leaveGroup: (groupId: string) => Promise<void>
   setRsvp: (sessionId: string, status: RsvpStatus) => Promise<void>
@@ -773,6 +790,61 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       },
 
+      refreshCurrentUser: async () => {
+        const token = stateRef.current.accessToken
+        if (!token) throw new Error('Authentication required')
+
+        const { user } = await api.me(token)
+        dispatch({ type: 'AUTH_SUCCESS', user, accessToken: token })
+        return user
+      },
+
+      addCourse: async (courseId) => {
+        if (stateRef.current.demoMode) {
+          const course = stateRef.current.courses.find((item) => item.id === courseId)
+          if (course) {
+            const next = [...stateRef.current.profile.courseDetails]
+            if (!next.some((item) => item.id === course.id)) next.push(course)
+            dispatch({ type: 'PROFILE_COURSES_SUCCESS', courses: next })
+            toast.success(`${course.code} added`)
+          }
+          return
+        }
+
+        const token = stateRef.current.accessToken
+        if (!token) throw new Error('Authentication required')
+
+        try {
+          const { user } = await api.addMyCourse(token, courseId)
+          dispatch({ type: 'AUTH_SUCCESS', user, accessToken: token })
+          toast.success('Course added')
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : 'Could not add course')
+          throw error
+        }
+      },
+
+      removeCourse: async (courseId) => {
+        if (stateRef.current.demoMode) {
+          const next = stateRef.current.profile.courseDetails.filter((course) => course.id !== courseId)
+          dispatch({ type: 'PROFILE_COURSES_SUCCESS', courses: next })
+          toast('Course removed')
+          return
+        }
+
+        const token = stateRef.current.accessToken
+        if (!token) throw new Error('Authentication required')
+
+        try {
+          const { user } = await api.removeMyCourse(token, courseId)
+          dispatch({ type: 'AUTH_SUCCESS', user, accessToken: token })
+          toast('Course removed')
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : 'Could not remove course')
+          throw error
+        }
+      },
+
       joinGroup: async (groupId) => {
         const group = stateRef.current.groups.find((g) => g.id === groupId)
         if (stateRef.current.demoMode) {
@@ -795,6 +867,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         try {
           const { studyGroup } = await api.joinStudyGroup(token, groupId)
           dispatch({ type: 'UPSERT_GROUP', group: groupFromApi(studyGroup) })
+          const { user } = await api.me(token)
+          dispatch({ type: 'AUTH_SUCCESS', user, accessToken: token })
           toast.success(`Joined ${studyGroup.name}`)
         } catch (error) {
           toast.error(error instanceof Error ? error.message : 'Could not join group')
@@ -932,6 +1006,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         try {
           const { studyGroup } = await api.createStudyGroup(token, input)
           dispatch({ type: 'UPSERT_GROUP', group: groupFromApi(studyGroup) })
+          const { user } = await api.me(token)
+          dispatch({ type: 'AUTH_SUCCESS', user, accessToken: token })
           toast.success(`${studyGroup.name} created`)
           return studyGroup.id
         } catch (error) {

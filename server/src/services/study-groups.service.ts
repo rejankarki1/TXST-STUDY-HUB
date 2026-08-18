@@ -251,6 +251,20 @@ export async function createStudyGroupForCourse(
       select: studyGroupSelect,
     });
 
+    await tx.userCourse.upsert({
+      where: {
+        userId_courseId: {
+          userId: creatorId,
+          courseId,
+        },
+      },
+      update: {},
+      create: {
+        userId: creatorId,
+        courseId,
+      },
+    });
+
     return {
       ok: true as const,
       studyGroup: formatStudyGroup(studyGroup, creatorId),
@@ -266,6 +280,7 @@ export async function joinStudyGroup(groupId: string, userId: string) {
       },
       select: {
         id: true,
+        courseId: true,
         maxMembers: true,
         _count: {
           select: {
@@ -315,6 +330,20 @@ export async function joinStudyGroup(groupId: string, userId: string) {
       data: {
         studyGroupId: groupId,
         userId,
+      },
+    });
+
+    await tx.userCourse.upsert({
+      where: {
+        userId_courseId: {
+          userId,
+          courseId: studyGroup.courseId,
+        },
+      },
+      update: {},
+      create: {
+        userId,
+        courseId: studyGroup.courseId,
       },
     });
 

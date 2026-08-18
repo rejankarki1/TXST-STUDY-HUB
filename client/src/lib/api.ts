@@ -176,6 +176,21 @@ export const api = {
     })
   },
 
+  addMyCourse(token: string, courseId: string) {
+    return apiRequest<{ user: CurrentUser }>('/me/courses', {
+      method: 'POST',
+      token,
+      body: JSON.stringify({ courseId }),
+    })
+  },
+
+  removeMyCourse(token: string, courseId: string) {
+    return apiRequest<{ user: CurrentUser }>(`/me/courses/${courseId}`, {
+      method: 'DELETE',
+      token,
+    })
+  },
+
   completeOnboarding(
     token: string,
     input: {

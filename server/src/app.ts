@@ -11,6 +11,7 @@ import coursesRoutes from "./routes/courses.routes.js";
 import departmentsRoutes from "./routes/departments.routes.js";
 import experiencesRoutes from "./routes/experiences.routes.js";
 import homeRoutes from "./routes/home.routes.js";
+import meRoutes from "./routes/me.routes.js";
 import questionsRoutes from "./routes/questions.routes.js";
 import resourcesRoutes from "./routes/resources.routes.js";
 import sessionsRoutes from "./routes/sessions.routes.js";
@@ -49,6 +50,7 @@ app.get("/api/db-health", async (_req, res, next) => {
 });
 
 app.use("/api/auth", authRoutes);
+app.use("/api/me", meRoutes);
 app.use("/api/home", homeRoutes);
 app.use("/api/departments", departmentsRoutes);
 app.use("/api/courses", coursesRoutes);
