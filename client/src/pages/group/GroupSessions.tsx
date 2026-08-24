@@ -2,9 +2,8 @@ import * as React from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { CalendarPlus, History } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { EmptyState } from '@/components/primitives'
+import { Card, EmptyState, TabButton, Tabs } from '@/components/primitives'
 import { SessionListItem } from '@/components/rows'
-import { cn } from '@/lib/utils'
 import { useApp } from '@/state/AppState'
 import { isMember, useGroup, useGroupSessions } from '@/state/selectors'
 
@@ -59,34 +58,27 @@ export default function GroupSessions() {
         )}
       </div>
 
-      <div className="mt-5 flex gap-1 border-b border-border">
+      <Tabs label="Session history" className="mt-5">
         {(['upcoming', 'past'] as const).map((id) => (
-          <button
+          <TabButton
             key={id}
-            type="button"
+            active={tab === id}
             onClick={() => setTab(id)}
-            aria-current={tab === id}
-            className={cn(
-              '-mb-px border-b-2 px-3 py-2 text-sm capitalize transition-colors',
-              tab === id
-                ? 'border-primary font-medium text-primary'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
-            )}
+            count={id === 'upcoming' ? upcoming.length : past.length}
           >
-            {id}
-            <span className="ml-1.5 text-xs text-faint-foreground">
-              {id === 'upcoming' ? upcoming.length : past.length}
-            </span>
-          </button>
+            <span className="capitalize">{id}</span>
+          </TabButton>
         ))}
-      </div>
+      </Tabs>
 
       {list.length ? (
-        <div className="mt-2 divide-y divide-border">
+        <Card padded={false} className="mt-4 overflow-hidden">
+        <div className="divide-y divide-border">
           {list.map((session) => (
             <SessionListItem key={session.id} session={session} past={tab === 'past'} />
           ))}
         </div>
+        </Card>
       ) : tab === 'upcoming' ? (
         <EmptyState
           className="mt-6"

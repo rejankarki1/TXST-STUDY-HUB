@@ -1,55 +1,79 @@
 import { Link } from 'react-router-dom'
-import { Clock, MapPin, Video } from 'lucide-react'
+import { Check, Clock, MapPin, Video } from 'lucide-react'
 import type { Session } from '@/data/types'
 import { Button } from '@/components/ui/button'
 import { AvatarStack } from '@/components/Avatar'
+import { Badge, CourseTag } from '@/components/primitives'
 import { dayLabel, timeRange } from '@/lib/format'
-import { goingCount, rsvpPeople } from '@/state/selectors'
-import { useApp } from '@/state/AppState'
-import { cn } from '@/lib/utils'
+import { cn, courseVars } from '@/lib/utils'
+import { goingCount, myRsvp, rsvpPeople } from '@/state/selectors'
+
+type CardGroup = { id: string; name: string; courseCode: string }
 
 /**
  * The most important block in the product: the one thing the student needs to
- * know when they open the app. Given a distinct maroon-tinted ground so it
- * reads as different in kind from everything else on the page — but kept to a
- * compact height so it never dominates.
+ * know when they open the app. It wears the *course's* accent rather than
+ * maroon — maroon is the app's own chrome, and this card belongs to a class.
+ * Kept to a compact height so it never dominates the page.
  */
 export function NextSessionCard({
   session,
+  group,
   eyebrow = 'Next up',
   className,
   showGroupLink = true,
 }: {
   session: Session
+  /** Falls back to the group the API embeds on the session. */
+  group?: CardGroup
   eyebrow?: string
   className?: string
   showGroupLink?: boolean
 }) {
-  const { state } = useApp()
-  const group = state.groups.find((g) => g.id === session.groupId)
+  const resolved: CardGroup | undefined =
+    group ??
+    (session.group
+      ? {
+          id: session.group.id,
+          name: session.group.name,
+          courseCode: session.group.course.code,
+        }
+      : undefined)
+
   const going = rsvpPeople(session, 'going')
+  const mine = myRsvp(session)
   const online = session.mode === 'online'
+  const courseCode = resolved?.courseCode
 
   return (
     <section
+      style={courseCode ? courseVars(courseCode) : undefined}
       className={cn(
-        'rounded-lg border border-primary-border bg-primary-subtle p-5 sm:p-6',
+        'rounded-xl border p-5 shadow-card sm:p-6',
+        courseCode
+          ? 'border-(--course-border) bg-[linear-gradient(135deg,var(--course-subtle),var(--surface)_72%)]'
+          : 'border-border bg-surface-raised',
         className,
       )}
       aria-label={`${eyebrow}: ${session.title}`}
     >
-      <p className="text-eyebrow text-primary">
-        {eyebrow}
-        {group && <span className="text-primary/60"> · {group.courseCode}</span>}
-      </p>
+      <div className="flex flex-wrap items-center gap-2">
+        <p className={cn('text-eyebrow', courseCode ? 'text-(--course)' : 'text-muted-foreground')}>
+          {eyebrow}
+        </p>
+        {courseCode && <CourseTag code={courseCode} size="sm" className="bg-surface/70" />}
+      </div>
 
       <h2 className="mt-2 text-xl font-semibold tracking-tight text-foreground sm:text-[22px]">
         {session.title}
       </h2>
 
-      <dl className="mt-4 flex flex-col gap-2.5 sm:flex-row sm:gap-8">
-        <div className="flex items-start gap-2.5">
-          <Clock className="mt-0.5 size-4 shrink-0 text-primary/70" aria-hidden="true" />
+      <dl className="mt-4 grid gap-3 sm:grid-cols-2">
+        <div className="flex items-start gap-2.5 rounded-lg bg-surface/65 px-3 py-2.5">
+          <Clock
+            className={cn('mt-0.5 size-4 shrink-0', courseCode ? 'text-(--course)' : 'text-muted-foreground')}
+            aria-hidden="true"
+          />
           <div className="text-sm leading-snug">
             <dt className="sr-only">When</dt>
             <dd className="font-medium text-foreground">{dayLabel(session.startsAt)}</dd>
@@ -59,11 +83,17 @@ export function NextSessionCard({
           </div>
         </div>
 
-        <div className="flex items-start gap-2.5">
+        <div className="flex items-start gap-2.5 rounded-lg bg-surface/65 px-3 py-2.5">
           {online ? (
-            <Video className="mt-0.5 size-4 shrink-0 text-primary/70" aria-hidden="true" />
+            <Video
+              className={cn('mt-0.5 size-4 shrink-0', courseCode ? 'text-(--course)' : 'text-muted-foreground')}
+              aria-hidden="true"
+            />
           ) : (
-            <MapPin className="mt-0.5 size-4 shrink-0 text-primary/70" aria-hidden="true" />
+            <MapPin
+              className={cn('mt-0.5 size-4 shrink-0', courseCode ? 'text-(--course)' : 'text-muted-foreground')}
+              aria-hidden="true"
+            />
           )}
           <div className="text-sm leading-snug">
             <dt className="sr-only">Where</dt>
@@ -75,18 +105,27 @@ export function NextSessionCard({
         </div>
       </dl>
 
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-primary-border/70 pt-4">
+      <div
+        className={cn(
+          'mt-5 flex flex-wrap items-center justify-between gap-3 border-t pt-4',
+          courseCode ? 'border-(--course-border)' : 'border-border',
+        )}
+      >
         <div className="flex items-center gap-2.5">
-          <AvatarStack people={going} max={5} size="sm" />
-          <span className="text-[13px] text-muted-foreground">
-            {goingCount(session)} going
-          </span>
+          <AvatarStack people={going} total={goingCount(session)} max={5} size="sm" />
+          <span className="text-[13px] text-muted-foreground">{goingCount(session)} going</span>
+          {mine === 'going' && (
+            <Badge tone="success" icon={Check}>
+              You're going
+            </Badge>
+          )}
+          {mine === 'maybe' && <Badge tone="warning">You said maybe</Badge>}
         </div>
 
         <div className="flex items-center gap-2">
-          {showGroupLink && group && (
-            <Button asChild variant="ghost" size="sm" className="hover:bg-primary-subtle-hover">
-              <Link to={`/groups/${group.id}`}>Open group</Link>
+          {showGroupLink && resolved && (
+            <Button asChild variant="ghost" size="sm">
+              <Link to={`/groups/${resolved.id}`}>Open group</Link>
             </Button>
           )}
           <Button asChild variant="primary" size="sm">

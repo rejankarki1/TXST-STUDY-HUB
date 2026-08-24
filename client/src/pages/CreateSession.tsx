@@ -5,7 +5,7 @@ import { Page } from '@/layouts/AppShell'
 import { Button } from '@/components/ui/button'
 import { Field, Input, Textarea } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { PageHeader } from '@/components/primitives'
+import { Card, CourseTag, PageHeader } from '@/components/primitives'
 import { CAMPUS_LOCATIONS } from '@/data/courses'
 import { useApp } from '@/state/AppState'
 import { isMember, useGroup } from '@/state/selectors'
@@ -62,8 +62,10 @@ export default function CreateSession() {
       <PageHeader
         title="Schedule session"
         description={`Add a study session for ${group.name}.`}
+        action={<CourseTag code={group.courseCode} />}
       />
 
+      <Card variant="raised">
       <form onSubmit={submit} className="space-y-5">
         <Field label="Title" htmlFor="title">
           <Input
@@ -167,6 +169,7 @@ export default function CreateSession() {
           </Button>
         </div>
       </form>
+      </Card>
     </Page>
   )
 }

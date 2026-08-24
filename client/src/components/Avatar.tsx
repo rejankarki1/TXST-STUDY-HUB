@@ -18,24 +18,26 @@ export function Avatar({
   className,
   ring,
 }: {
-  person: Pick<Person, 'name'>
+  person?: Pick<Person, 'name'> | null
   size?: Size
   className?: string
   /** Adds a background-coloured ring, for overlapping stacks. */
   ring?: boolean
 }) {
+  const name = person?.name?.trim() || 'Student'
+
   return (
     <span
       className={cn(
         'inline-flex shrink-0 items-center justify-center rounded-full font-semibold uppercase leading-none select-none',
         SIZES[size],
-        avatarTint(person.name),
+        avatarTint(name),
         ring && 'ring-2 ring-surface',
         className,
       )}
       aria-hidden="true"
     >
-      {initials(person.name)}
+      {initials(name)}
     </span>
   )
 }
@@ -46,6 +48,7 @@ export function AvatarStack({
   size = 'sm',
   className,
   label,
+  total,
 }: {
   people: Pick<Person, 'id' | 'name'>[]
   max?: number
@@ -53,9 +56,15 @@ export function AvatarStack({
   className?: string
   /** Accessible description, e.g. "7 members". */
   label?: string
+  /**
+   * The real population size, when `people` is only a slice of it — the server's
+   * `memberCount` / `goingCount`. Without it "+N" counts the array we were
+   * handed, which undercounts every time a caller passes a subset.
+   */
+  total?: number
 }) {
   const shown = people.slice(0, max)
-  const extra = people.length - shown.length
+  const extra = (total ?? people.length) - shown.length
 
   return (
     <div className={cn('flex items-center', className)}>

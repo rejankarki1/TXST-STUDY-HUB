@@ -12,6 +12,11 @@
   --background: #faf9f7; /* warm neutral page ground */
   --surface: #ffffff; /* raised content */
   --surface-sunken: #f3f1ee; /* wells, inactive tabs, skeletons */
+  --surface-raised: #ffffff;
+  --surface-hover: #f7f5f2;
+  --surface-active: #eeeae5;
+  --surface-selected: #f7efef;
+  --brand-wash: #fbf4f2;
 
   /* Ink ----------------------------------------------------------------- */
   --foreground: #1c1a19; /* charcoal */
@@ -47,6 +52,10 @@
   --color-background: var(--background);
   --color-surface: var(--surface);
   --color-surface-sunken: var(--surface-sunken);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-hover: var(--surface-hover);
+  --color-surface-active: var(--surface-active);
+  --color-surface-selected: var(--surface-selected);
 
   --color-foreground: var(--foreground);
   --color-foreground-soft: var(--foreground-soft);
@@ -77,10 +86,13 @@
 
   --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 
-  /* One shadow. Separation comes from borders and whitespace. */
+  /* Subtle product depth. Separation still comes mainly from borders and whitespace. */
   --shadow-xs: 0 1px 2px 0 rgb(28 26 25 / 0.05);
   --shadow-sm: 0 1px 3px 0 rgb(28 26 25 / 0.07), 0 1px 2px -1px rgb(28 26 25 / 0.05);
   --shadow-md: 0 4px 14px -2px rgb(28 26 25 / 0.1), 0 2px 6px -3px rgb(28 26 25 / 0.06);
+  --shadow-button: 0 1px 2px rgb(28 26 25 / 0.1), 0 1px 0 rgb(255 255 255 / 0.14) inset;
+  --shadow-card: 0 1px 2px rgb(28 26 25 / 0.04), 0 8px 24px -20px rgb(28 26 25 / 0.24);
+  --shadow-card-hover: 0 2px 4px rgb(28 26 25 / 0.06), 0 14px 34px -22px rgb(28 26 25 / 0.28);
 
   --animate-fade-in: fade-in 0.16s ease-out;
   --animate-rise: rise 0.2s cubic-bezier(0.22, 1, 0.36, 1);

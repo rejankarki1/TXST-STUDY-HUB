@@ -72,7 +72,7 @@ export default function Landing() {
       </header>
 
       {/* ---------------------------------------------------------- hero */}
-      <section className="mx-auto max-w-6xl px-5 pb-20 pt-14 sm:px-8 sm:pt-20 lg:pb-28 lg:pt-24">
+      <section className="mx-auto max-w-6xl px-5 pb-12 pt-10 sm:px-8 sm:pt-12 lg:pb-16 lg:pt-14">
         <div className="grid items-center gap-14 lg:grid-cols-[minmax(0,1fr)_minmax(0,26rem)] lg:gap-16">
           <div>
             <p className="text-eyebrow text-primary">For Texas State students</p>
@@ -117,23 +117,26 @@ export default function Landing() {
       {/* -------------------------------------------------- how it works */}
       <section
         id="how-it-works"
-        className="scroll-mt-16 border-y border-border bg-surface py-16 sm:py-20"
+        className="scroll-mt-16 border-y border-border bg-surface py-10 sm:py-12"
       >
         <div className="mx-auto max-w-6xl px-5 sm:px-8">
           <h2 className="text-2xl font-semibold tracking-tight text-foreground sm:text-[28px]">
             How it works
           </h2>
 
-          <ol className="mt-10 grid gap-10 sm:grid-cols-3 sm:gap-8">
+          <ol className="mt-8 grid gap-4 sm:grid-cols-3">
             {STEPS.map((step) => (
-              <li key={step.n}>
-                <span className="flex size-8 items-center justify-center rounded-full bg-primary-subtle text-[13px] font-semibold text-primary">
+              <li
+                key={step.n}
+                className="rounded-lg border border-border bg-background p-6 transition-colors hover:border-border-strong"
+              >
+                <span className="flex size-11 items-center justify-center rounded-full bg-primary-subtle text-lg font-semibold text-primary">
                   {step.n}
                 </span>
-                <h3 className="mt-4 text-[17px] font-semibold tracking-tight text-foreground">
+                <h3 className="mt-5 text-[19px] font-semibold tracking-tight text-foreground">
                   {step.title}
                 </h3>
-                <p className="mt-1.5 max-w-xs text-sm leading-relaxed text-muted-foreground">
+                <p className="mt-2 text-[15px] leading-relaxed text-muted-foreground">
                   {step.body}
                 </p>
               </li>
@@ -143,7 +146,7 @@ export default function Landing() {
       </section>
 
       {/* ------------------------------------------------------ features */}
-      <section className="py-16 sm:py-20 lg:py-24">
+      <section className="py-10 sm:py-12 lg:py-14">
         <div className="mx-auto max-w-6xl px-5 sm:px-8">
           <h2 className="max-w-lg text-2xl font-semibold tracking-tight text-foreground sm:text-[28px]">
             Everything happens around your courses.

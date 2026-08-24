@@ -1,26 +1,12 @@
 import * as React from 'react'
 import { Link } from 'react-router-dom'
-import { Bell, CalendarPlus, MessageSquare, UserPlus, Clock } from 'lucide-react'
-import type { Notification } from '@/data/types'
+import { Bell } from 'lucide-react'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { relative } from '@/lib/format'
+import { NOTIFICATION_ICONS, notificationHref } from '@/lib/notifications'
 import { cn } from '@/lib/utils'
 import { useApp } from '@/state/AppState'
 import { useUnreadNotifications } from '@/state/selectors'
-
-const ICONS = {
-  session: CalendarPlus,
-  message: MessageSquare,
-  reminder: Clock,
-  member: UserPlus,
-} as const
-
-function destination(n: Notification) {
-  if (n.sessionId) return `/sessions/${n.sessionId}`
-  if (n.kind === 'message' && n.groupId) return `/groups/${n.groupId}/chat`
-  if (n.groupId) return `/groups/${n.groupId}`
-  return '/home'
-}
 
 export function NotificationBell({ className }: { className?: string }) {
   const { state, markNotificationsRead } = useApp()
@@ -38,15 +24,15 @@ export function NotificationBell({ className }: { className?: string }) {
     >
       <PopoverTrigger
         className={cn(
-          'relative inline-flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-sunken hover:text-foreground',
-          'data-[state=open]:bg-surface-sunken data-[state=open]:text-foreground',
+          'relative inline-flex size-10 items-center justify-center rounded-xl text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground',
+          'data-[state=open]:bg-surface-hover data-[state=open]:text-foreground',
           className,
         )}
         aria-label={unread ? `Notifications, ${unread} unread` : 'Notifications'}
       >
         <Bell className="size-[18px]" />
         {unread > 0 && (
-          <span className="absolute right-1.5 top-1.5 size-2 rounded-full bg-primary ring-2 ring-surface" />
+          <span className="absolute right-2 top-2 size-2 rounded-full bg-primary ring-2 ring-surface" />
         )}
       </PopoverTrigger>
 
@@ -66,20 +52,20 @@ export function NotificationBell({ className }: { className?: string }) {
 
         <ul className="max-h-[22rem] divide-y divide-border overflow-y-auto scroll-slim">
           {state.notifications.map((n) => {
-            const Icon = ICONS[n.kind]
+            const Icon = NOTIFICATION_ICONS[n.kind]
             return (
               <li key={n.id}>
                 <Link
-                  to={destination(n)}
+                  to={notificationHref(n)}
                   onClick={() => setOpen(false)}
                   className={cn(
-                    'flex gap-3 px-4 py-3 transition-colors hover:bg-surface-sunken',
+                    'flex gap-3 px-4 py-3 transition-colors hover:bg-surface-hover',
                     !n.read && 'bg-primary-subtle/40',
                   )}
                 >
                   <span
                     className={cn(
-                      'mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full',
+                      'mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg',
                       n.read ? 'bg-surface-sunken text-muted-foreground' : 'bg-primary-subtle text-primary',
                     )}
                   >

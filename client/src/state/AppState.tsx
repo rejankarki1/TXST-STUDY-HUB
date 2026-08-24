@@ -20,7 +20,9 @@ import { nextReply } from '@/data/replies'
 import { plusMinutes } from '@/data/time'
 import {
   api,
+  ApiError,
   type ApiCourse,
+  type ApiDepartment,
   type ApiStudyGroup,
   type ApiStudySession,
   type CurrentUser,
@@ -48,6 +50,7 @@ export type AppState = {
   courses: ApiCourse[]
   coursesLoading: boolean
   coursesError: string | null
+  departments: ApiDepartment[]
   groupsLoading: boolean
   groupsError: string | null
   sessionsLoading: boolean
@@ -70,12 +73,15 @@ type Action =
   | { type: 'COURSES_LOADING'; loading: boolean }
   | { type: 'COURSES_SUCCESS'; courses: ApiCourse[] }
   | { type: 'COURSES_FAILURE'; message: string }
+  | { type: 'COURSES_UPSERT'; courses: ApiCourse[] }
+  | { type: 'DEPARTMENTS_SUCCESS'; departments: ApiDepartment[] }
   | { type: 'PROFILE_COURSES_SUCCESS'; courses: ApiCourse[] }
   | { type: 'GROUPS_LOADING'; loading: boolean }
   | { type: 'GROUPS_SUCCESS'; groups: Group[] }
   | { type: 'GROUPS_FAILURE'; message: string }
   | { type: 'UPSERT_GROUP'; group: Group }
   | { type: 'UPSERT_GROUPS'; groups: Group[] }
+  | { type: 'REMOVE_GROUP'; groupId: string }
   | { type: 'SESSIONS_LOADING'; loading: boolean }
   | { type: 'SESSIONS_SUCCESS'; sessions: Session[] }
   | { type: 'SESSIONS_FAILURE'; message: string }
@@ -122,13 +128,25 @@ function profileFromUser(user: CurrentUser): Profile {
   }
 }
 
+/**
+ * Chat, notifications, and unread have no backend yet. The seeded versions belong
+ * to demo mode only — a real account must never be shown fabricated activity, and
+ * those fixtures reference demo ids (g1, s1) that do not resolve for real users.
+ * See ENTER_DEMO, which is where the seeded data is applied.
+ */
 const collaborationState = {
   sessions: [],
+  messages: [],
+  notifications: [],
+  unread: {},
+  typingIn: null,
+  replyTurn: {},
+}
+
+const demoCollaborationState = {
   messages: seedMessages,
   notifications: seedNotifications,
   unread: initialUnread,
-  typingIn: null,
-  replyTurn: {},
 }
 
 const initialState: AppState = {
@@ -142,6 +160,7 @@ const initialState: AppState = {
   courses: [],
   coursesLoading: true,
   coursesError: null,
+  departments: [],
   groups: [],
   groupsLoading: false,
   groupsError: null,
@@ -157,6 +176,7 @@ function groupFromApi(group: ApiStudyGroup): Group {
     name: group.name,
     courseId: group.courseId,
     courseCode: group.course.code,
+    course: group.course,
     description: group.description,
     purpose: group.purpose,
     meetingStyle: group.meetingStyle,
@@ -292,6 +312,20 @@ function reducer(state: AppState, action: Action): AppState {
         coursesError: null,
       }
 
+    /* Merge, don't replace: state.courses is fetched once on mount, so a course
+       created mid-session has to be folded in or nothing downstream sees it. */
+    case 'COURSES_UPSERT': {
+      const byId = new Map(state.courses.map((course) => [course.id, course]))
+      for (const course of action.courses) byId.set(course.id, course)
+      return {
+        ...state,
+        courses: [...byId.values()].sort((a, b) => a.code.localeCompare(b.code)),
+      }
+    }
+
+    case 'DEPARTMENTS_SUCCESS':
+      return { ...state, departments: action.departments }
+
     case 'COURSES_FAILURE':
       return {
         ...state,
@@ -351,6 +385,15 @@ function reducer(state: AppState, action: Action): AppState {
       }
     }
 
+    case 'REMOVE_GROUP':
+      return {
+        ...state,
+        groups: state.groups.filter((group) => group.id !== action.groupId),
+        sessions: state.sessions.filter((session) => session.groupId !== action.groupId),
+        messages: state.messages.filter((message) => message.groupId !== action.groupId),
+        notifications: state.notifications.filter((notification) => notification.groupId !== action.groupId),
+      }
+
     case 'SESSIONS_LOADING':
       return { ...state, sessionsLoading: action.loading, sessionsError: null }
 
@@ -398,6 +441,7 @@ function reducer(state: AppState, action: Action): AppState {
         courses: state.courses,
         coursesLoading: state.coursesLoading,
         coursesError: state.coursesError,
+        departments: state.departments,
         authLoading: false,
       }
 
@@ -415,6 +459,7 @@ function reducer(state: AppState, action: Action): AppState {
         profile: DEMO_PROFILE,
         groups: seedGroups.map(groupFromDemo),
         sessions: seedSessions.map(sessionFromDemo),
+        ...demoCollaborationState,
         groupsLoading: false,
         groupsError: null,
         sessionsLoading: false,
@@ -474,6 +519,13 @@ function reducer(state: AppState, action: Action): AppState {
 let idSeq = 1000
 const nextId = (prefix: string) => `${prefix}${++idSeq}`
 
+export type NewCourseInput = {
+  code: string
+  title: string
+  description?: string
+  departmentId: string
+}
+
 export type NewGroupInput = {
   name: string
   courseId: string
@@ -515,10 +567,13 @@ type AppApi = {
   refreshGroupSessions: (groupId: string) => Promise<void>
   refreshSession: (sessionId: string) => Promise<void>
   refreshCurrentUser: () => Promise<CurrentUser>
+  loadDepartments: () => Promise<void>
+  createCourse: (input: NewCourseInput) => Promise<ApiCourse>
   addCourse: (courseId: string) => Promise<void>
   removeCourse: (courseId: string) => Promise<void>
   joinGroup: (groupId: string) => Promise<void>
   leaveGroup: (groupId: string) => Promise<void>
+  deleteGroup: (groupId: string) => Promise<void>
   setRsvp: (sessionId: string, status: RsvpStatus) => Promise<void>
   sendMessage: (groupId: string, body: string) => void
   createGroup: (input: NewGroupInput) => Promise<string>
@@ -663,7 +718,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const token = stateRef.current.accessToken
         if (!token) throw new Error('Authentication required')
 
-        const { user } = await api.completeOnboarding(token, input)
+        const { user } = await api.updateMe(token, input)
         dispatch({ type: 'AUTH_SUCCESS', user, accessToken: token })
         return user
       },
@@ -690,7 +745,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         if (!token || stateRef.current.demoMode) return
 
         try {
-          const { studyGroups } = await api.listCourseStudyGroups(token, courseId)
+          const { studyGroups } = await api.listStudyGroups(token, { courseId })
           dispatch({ type: 'UPSERT_GROUPS', groups: studyGroups.map(groupFromApi) })
         } catch (error) {
           dispatch({
@@ -797,6 +852,55 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const { user } = await api.me(token)
         dispatch({ type: 'AUTH_SUCCESS', user, accessToken: token })
         return user
+      },
+
+      loadDepartments: async () => {
+        if (stateRef.current.departments.length > 0) return
+        try {
+          const { departments } = await api.listDepartments()
+          dispatch({ type: 'DEPARTMENTS_SUCCESS', departments })
+        } catch {
+          /* The add-course form falls back to a blocked state on its own. */
+        }
+      },
+
+      createCourse: async (input) => {
+        if (stateRef.current.demoMode) {
+          const course: ApiCourse = {
+            id: nextId('c'),
+            code: input.code,
+            title: input.title,
+            description: input.description ?? null,
+            department:
+              stateRef.current.departments.find((d) => d.id === input.departmentId) ?? null,
+          }
+          dispatch({ type: 'COURSES_UPSERT', courses: [course] })
+          toast.success(`${course.code} added`)
+          return course
+        }
+
+        const token = stateRef.current.accessToken
+        if (!token) throw new Error('Authentication required')
+
+        try {
+          const { course } = await api.createCourse(token, input)
+          dispatch({ type: 'COURSES_UPSERT', courses: [course] })
+          toast.success(`${course.code} added`)
+          return course
+        } catch (error) {
+          /* 409 means someone already created it. Adopting the existing course is
+             the whole anti-duplication guard — surfacing an error here is what
+             would push students into inventing a variant code. */
+          if (error instanceof ApiError && error.status === 409) {
+            const existing = (error.data as { course?: ApiCourse } | undefined)?.course
+            if (existing) {
+              dispatch({ type: 'COURSES_UPSERT', courses: [existing] })
+              return existing
+            }
+          }
+          toast.error(error instanceof Error ? error.message : 'Could not add course')
+          throw error
+        }
       },
 
       addCourse: async (courseId) => {
@@ -906,6 +1010,27 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       },
 
+      deleteGroup: async (groupId) => {
+        const group = stateRef.current.groups.find((g) => g.id === groupId)
+        if (stateRef.current.demoMode) {
+          dispatch({ type: 'REMOVE_GROUP', groupId })
+          toast(group ? `${group.name} deleted` : 'Group deleted')
+          return
+        }
+
+        const token = stateRef.current.accessToken
+        if (!token) throw new Error('Authentication required')
+
+        try {
+          await api.deleteStudyGroup(token, groupId)
+          dispatch({ type: 'REMOVE_GROUP', groupId })
+          toast(group ? `${group.name} deleted` : 'Group deleted')
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : 'Could not delete group')
+          throw error
+        }
+      },
+
       setRsvp: async (sessionId, status) => {
         if (stateRef.current.demoMode) {
           dispatch({ type: 'SET_RSVP', sessionId, status })
@@ -938,9 +1063,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       },
 
-      /* Optimistic send, then a scripted member reply so the chat screen
-         demonstrates a real conversation. */
+      /* Demo only. There is no messages endpoint, so a real account must never
+         see a fabricated conversation — the composer is disabled for them and
+         this is a no-op if it is ever called anyway. */
       sendMessage: (groupId, body) => {
+        if (!stateRef.current.demoMode) return
+
         dispatch({
           type: 'SEND_MESSAGE',
           message: {

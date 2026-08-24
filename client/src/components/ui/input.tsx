@@ -6,10 +6,10 @@ function Input({ className, ...props }: React.ComponentProps<'input'>) {
     <input
       data-slot="input"
       className={cn(
-        'h-10 w-full rounded-md border border-border-strong bg-surface px-3 text-sm text-foreground shadow-xs transition-colors',
+        'h-11 w-full rounded-lg border border-border-strong bg-surface-raised px-3.5 text-sm text-foreground shadow-xs transition-[border-color,box-shadow,background-color] duration-150',
         'placeholder:text-faint-foreground',
-        'hover:border-[color-mix(in_srgb,var(--primary)_25%,var(--border-strong))]',
-        'focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/15',
+        'hover:border-[color-mix(in_srgb,var(--primary)_28%,var(--border-strong))] hover:bg-surface',
+        'focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/15 focus-visible:ring-offset-0',
         'aria-[invalid=true]:border-danger aria-[invalid=true]:ring-danger/15',
         'disabled:cursor-not-allowed disabled:opacity-60',
         className,
@@ -24,8 +24,9 @@ function Textarea({ className, ...props }: React.ComponentProps<'textarea'>) {
     <textarea
       data-slot="textarea"
       className={cn(
-        'w-full rounded-md border border-border-strong bg-surface px-3 py-2.5 text-sm text-foreground shadow-xs transition-colors',
+        'w-full rounded-lg border border-border-strong bg-surface-raised px-3.5 py-2.5 text-sm text-foreground shadow-xs transition-[border-color,box-shadow,background-color] duration-150',
         'placeholder:text-faint-foreground',
+        'hover:border-[color-mix(in_srgb,var(--primary)_28%,var(--border-strong))] hover:bg-surface',
         'focus-visible:border-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/15',
         'aria-[invalid=true]:border-danger aria-[invalid=true]:ring-danger/15',
         'disabled:cursor-not-allowed disabled:opacity-60',

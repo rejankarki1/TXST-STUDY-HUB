@@ -1,4 +1,5 @@
 import { useParams } from 'react-router-dom'
+import { Card } from '@/components/primitives'
 import { MemberRow } from '@/components/rows'
 import { VIEWER_ID } from '@/data/people'
 import { useApp } from '@/state/AppState'
@@ -26,7 +27,8 @@ export default function GroupMembers() {
         {group.spotsLeft ?? Math.max(group.maxMembers - members.length, 0)} more
       </p>
 
-      <div className="mt-5 divide-y divide-border border-y border-border">
+      <Card padded={false} className="mt-5 overflow-hidden">
+      <div className="divide-y divide-border">
         {ordered.map((person) => (
           <MemberRow
             key={person.id}
@@ -36,6 +38,7 @@ export default function GroupMembers() {
           />
         ))}
       </div>
+      </Card>
     </div>
   )
 }

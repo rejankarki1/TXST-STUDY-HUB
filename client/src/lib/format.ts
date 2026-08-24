@@ -7,6 +7,7 @@ import {
   isYesterday,
   parseISO,
 } from 'date-fns'
+import type { MeetingStyle } from '@/data/types'
 
 export const toDate = (iso: string) => parseISO(iso)
 
@@ -65,3 +66,12 @@ export function chatDayLabel(iso: string) {
 export const sameDay = (a: string, b: string) => isSameDay(parseISO(a), parseISO(b))
 
 export const isPast = (iso: string) => parseISO(iso).getTime() < Date.now()
+
+/** The one place a stored meeting style becomes display text. */
+const MEETING_STYLE: Record<MeetingStyle, string> = {
+  'in-person': 'In person',
+  online: 'Online',
+  flexible: 'Flexible',
+}
+
+export const meetingStyleLabel = (style: MeetingStyle) => MEETING_STYLE[style]

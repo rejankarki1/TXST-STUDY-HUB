@@ -3,19 +3,10 @@ import cookieParser from "cookie-parser";
 import express from "express";
 import helmet from "helmet";
 
-import { prisma } from "./config/prisma.js";
-import { errorHandler } from "./middleware/errorHandler.js";
-import { notFoundHandler } from "./middleware/notFoundHandler.js";
-import authRoutes from "./routes/auth.routes.js";
-import coursesRoutes from "./routes/courses.routes.js";
-import departmentsRoutes from "./routes/departments.routes.js";
-import experiencesRoutes from "./routes/experiences.routes.js";
-import homeRoutes from "./routes/home.routes.js";
-import meRoutes from "./routes/me.routes.js";
-import questionsRoutes from "./routes/questions.routes.js";
-import resourcesRoutes from "./routes/resources.routes.js";
-import sessionsRoutes from "./routes/sessions.routes.js";
-import studyGroupsRoutes from "./routes/study-groups.routes.js";
+import { prisma } from "./lib/prisma.js";
+import { errorHandler } from "./middleware/error.js";
+import { notFoundHandler } from "./middleware/notFound.js";
+import apiRoutes from "./routes/index.js";
 
 const app = express();
 
@@ -49,16 +40,7 @@ app.get("/api/db-health", async (_req, res, next) => {
   }
 });
 
-app.use("/api/auth", authRoutes);
-app.use("/api/me", meRoutes);
-app.use("/api/home", homeRoutes);
-app.use("/api/departments", departmentsRoutes);
-app.use("/api/courses", coursesRoutes);
-app.use("/api/experiences", experiencesRoutes);
-app.use("/api/questions", questionsRoutes);
-app.use("/api/resources", resourcesRoutes);
-app.use("/api/sessions", sessionsRoutes);
-app.use("/api/study-groups", studyGroupsRoutes);
+app.use("/api", apiRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);

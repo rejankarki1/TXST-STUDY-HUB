@@ -2,10 +2,10 @@ import { Link, useParams } from 'react-router-dom'
 import { CalendarPlus, Lock, MessageSquare } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarStack } from '@/components/Avatar'
-import { EmptyState, SectionHeader } from '@/components/primitives'
+import { Card, EmptyState, SectionHeader } from '@/components/primitives'
 import { NextSessionCard } from '@/components/NextSessionCard'
 import { peopleById } from '@/data/people'
-import { time } from '@/lib/format'
+import { meetingStyleLabel, time } from '@/lib/format'
 import {
   isMember,
   membersOf,
@@ -32,7 +32,12 @@ export default function GroupOverview() {
         {/* next session */}
         <section>
           {next ? (
-            <NextSessionCard session={next} eyebrow="Next session" showGroupLink={false} />
+            <NextSessionCard
+              session={next}
+              group={{ id: group.id, name: group.name, courseCode: group.courseCode }}
+              eyebrow="Next session"
+              showGroupLink={false}
+            />
           ) : (
             <EmptyState
               icon={CalendarPlus}
@@ -51,16 +56,17 @@ export default function GroupOverview() {
         {/* about */}
         <section>
           <SectionHeader title="About" />
+          <Card variant="subtle" className="p-5">
           <p className="text-sm leading-relaxed text-foreground-soft">{group.description}</p>
-          <dl className="mt-4 flex flex-wrap gap-x-10 gap-y-3 text-[13px]">
+          <dl className="mt-4 grid gap-4 text-[13px] sm:grid-cols-2">
             <div>
               <dt className="text-muted-foreground">Focus</dt>
               <dd className="mt-0.5 font-medium text-foreground">{group.purpose}</dd>
             </div>
             <div>
               <dt className="text-muted-foreground">Usually meets</dt>
-              <dd className="mt-0.5 font-medium capitalize text-foreground">
-                {group.meetingStyle === 'in-person' ? 'In person' : group.meetingStyle}
+              <dd className="mt-0.5 font-medium text-foreground">
+                {meetingStyleLabel(group.meetingStyle)}
               </dd>
             </div>
             <div>
@@ -76,6 +82,7 @@ export default function GroupOverview() {
               </dd>
             </div>
           </dl>
+          </Card>
         </section>
 
         {/* recent chat — this is what makes the group feel alive */}
@@ -94,7 +101,7 @@ export default function GroupOverview() {
               description="Group chat is only visible to members."
             />
           ) : recent.length ? (
-            <div className="space-y-4 rounded-lg border border-border bg-surface p-5">
+            <Card variant="raised" className="space-y-4 p-5">
               {recent.map((m) => {
                 const person = peopleById[m.authorId]
                 return (
@@ -123,7 +130,7 @@ export default function GroupOverview() {
                   </Link>
                 </Button>
               </div>
-            </div>
+            </Card>
           ) : (
             <EmptyState
               compact
@@ -146,6 +153,7 @@ export default function GroupOverview() {
             action="View all"
             to={`/groups/${group.id}/members`}
           />
+          <Card variant="subtle" className="p-4">
           <AvatarStack people={members} max={6} size="md" className="mb-3" />
           <p className="text-[13px] leading-relaxed text-muted-foreground">
             {members
@@ -154,6 +162,7 @@ export default function GroupOverview() {
               .join(', ')}
             {members.length > 4 && ` and ${members.length - 4} more`}
           </p>
+          </Card>
         </section>
 
         {upcoming.length > 1 && (
@@ -163,10 +172,11 @@ export default function GroupOverview() {
               action="All sessions"
               to={`/groups/${group.id}/sessions`}
             />
-            <ul className="space-y-3.5">
+            <Card padded={false} className="overflow-hidden">
+            <ul className="divide-y divide-border">
               {upcoming.slice(1, 4).map((s) => (
                 <li key={s.id}>
-                  <Link to={`/sessions/${s.id}`} className="group block">
+                  <Link to={`/sessions/${s.id}`} className="group block p-3 transition-colors hover:bg-surface-hover">
                     <p className="text-sm font-medium text-foreground group-hover:text-primary">
                       {s.title}
                     </p>
@@ -180,16 +190,17 @@ export default function GroupOverview() {
                 </li>
               ))}
             </ul>
+            </Card>
           </section>
         )}
 
         {!joined && (
-          <section className="rounded-lg border border-border bg-surface p-5">
+          <Card variant="selected" className="p-5">
             <p className="text-sm font-medium text-foreground">Not a member yet</p>
             <p className="mt-1 text-[13px] leading-relaxed text-muted-foreground">
               Join to see the group chat and RSVP to study sessions.
             </p>
-          </section>
+          </Card>
         )}
       </aside>
     </div>

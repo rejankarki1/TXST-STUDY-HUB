@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL ?? 'http://localhost:5050/api'
+const API_URL = import.meta.env.VITE_API_URL ?? '/api'
 
 type ApiResponse<T> = {
   success: boolean
@@ -7,12 +7,33 @@ type ApiResponse<T> = {
   errors?: Record<string, string[] | undefined>
 }
 
+/** Carries status and body through, so callers can react to a specific failure
+ *  (e.g. adopting the existing course a 409 hands back) instead of only a string. */
+export class ApiError extends Error {
+  /* Explicit fields, not constructor parameter properties: this project builds
+     with erasableSyntaxOnly. */
+  status: number
+  data?: unknown
+
+  constructor(message: string, status: number, data?: unknown) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.data = data
+  }
+}
+
+export type ApiDepartment = {
+  id: string
+  code: string
+  name: string
+}
+
 export type ApiCourse = {
   id: string
   code: string
   title: string
   description?: string | null
-  questionCount?: number
   department?: {
     id: string
     code: string
@@ -132,11 +153,11 @@ async function apiRequest<T>(
   }))) as ApiResponse<T>
 
   if (!response.ok || !payload.success) {
-    throw new Error(payload.message ?? 'Request failed')
+    throw new ApiError(payload.message ?? 'Request failed', response.status, payload.data)
   }
 
   if (!payload.data) {
-    throw new Error('Response data missing')
+    throw new ApiError('Response data missing', response.status)
   }
 
   return payload.data
@@ -177,21 +198,21 @@ export const api = {
   },
 
   addMyCourse(token: string, courseId: string) {
-    return apiRequest<{ user: CurrentUser }>('/me/courses', {
+    return apiRequest<{ user: CurrentUser }>(`/courses/${courseId}/join`, {
       method: 'POST',
       token,
-      body: JSON.stringify({ courseId }),
     })
   },
 
   removeMyCourse(token: string, courseId: string) {
-    return apiRequest<{ user: CurrentUser }>(`/me/courses/${courseId}`, {
+    return apiRequest<{ user: CurrentUser }>(`/courses/${courseId}/leave`, {
       method: 'DELETE',
       token,
     })
   },
 
-  completeOnboarding(
+  /** Also the step that completes onboarding — see PATCH /auth/me. */
+  updateMe(
     token: string,
     input: {
       name?: string
@@ -200,8 +221,8 @@ export const api = {
       courseCodes: string[]
     },
   ) {
-    return apiRequest<{ user: CurrentUser }>('/auth/onboarding', {
-      method: 'POST',
+    return apiRequest<{ user: CurrentUser }>('/auth/me', {
+      method: 'PATCH',
       token,
       body: JSON.stringify(input),
     })
@@ -218,37 +239,51 @@ export const api = {
     return apiRequest<{ course: ApiCourse }>(`/courses/${id}`)
   },
 
+  listDepartments(search?: string) {
+    const params = new URLSearchParams()
+    if (search?.trim()) params.set('search', search.trim())
+    const query = params.toString()
+    return apiRequest<{ departments: ApiDepartment[] }>(
+      `/courses/departments${query ? `?${query}` : ''}`,
+    )
+  },
+
+  /** departmentId only — never departmentCode/Name, so the client cannot
+   *  create a department even though the endpoint would allow it. */
+  createCourse(
+    token: string,
+    input: { code: string; title: string; description?: string; departmentId: string },
+  ) {
+    return apiRequest<{ course: ApiCourse }>('/courses', {
+      method: 'POST',
+      token,
+      body: JSON.stringify(input),
+    })
+  },
+
   listStudyGroups(token: string, input: { courseId?: string; search?: string } = {}) {
     const params = new URLSearchParams()
     if (input.courseId) params.set('courseId', input.courseId)
     if (input.search?.trim()) params.set('search', input.search.trim())
     const query = params.toString()
     return apiRequest<{ studyGroups: ApiStudyGroup[] }>(
-      `/study-groups${query ? `?${query}` : ''}`,
+      `/groups${query ? `?${query}` : ''}`,
       { token },
     )
   },
 
   listMyStudyGroups(token: string) {
-    return apiRequest<{ studyGroups: ApiStudyGroup[] }>('/study-groups/mine', { token })
-  },
-
-  listCourseStudyGroups(token: string, courseId: string) {
-    return apiRequest<{ studyGroups: ApiStudyGroup[] }>(
-      `/courses/${courseId}/study-groups`,
-      { token },
-    )
+    return apiRequest<{ studyGroups: ApiStudyGroup[] }>('/groups/mine', { token })
   },
 
   getStudyGroup(token: string, groupId: string) {
-    return apiRequest<{ studyGroup: ApiStudyGroup }>(`/study-groups/${groupId}`, { token })
+    return apiRequest<{ studyGroup: ApiStudyGroup }>(`/groups/${groupId}`, { token })
   },
 
   listStudyGroupMembers(token: string, groupId: string) {
-    return apiRequest<{ members: ApiStudyGroupMember[] }>(
-      `/study-groups/${groupId}/members`,
-      { token },
-    )
+    return apiRequest<{ members: ApiStudyGroupMember[] }>(`/groups/${groupId}/members`, {
+      token,
+    })
   },
 
   createStudyGroup(
@@ -262,7 +297,7 @@ export const api = {
       maxMembers: number
     },
   ) {
-    return apiRequest<{ studyGroup: ApiStudyGroup }>('/study-groups', {
+    return apiRequest<{ studyGroup: ApiStudyGroup }>('/groups', {
       method: 'POST',
       token,
       body: JSON.stringify(input),
@@ -270,25 +305,29 @@ export const api = {
   },
 
   joinStudyGroup(token: string, groupId: string) {
-    return apiRequest<{ studyGroup: ApiStudyGroup }>(`/study-groups/${groupId}/join`, {
+    return apiRequest<{ studyGroup: ApiStudyGroup }>(`/groups/${groupId}/join`, {
       method: 'POST',
       token,
     })
   },
 
   leaveStudyGroup(token: string, groupId: string) {
-    return apiRequest<{ studyGroup: ApiStudyGroup }>(
-      `/study-groups/${groupId}/membership`,
-      {
-        method: 'DELETE',
-        token,
-      },
-    )
+    return apiRequest<{ studyGroup: ApiStudyGroup }>(`/groups/${groupId}/leave`, {
+      method: 'DELETE',
+      token,
+    })
+  },
+
+  deleteStudyGroup(token: string, groupId: string) {
+    return apiRequest<{ groupId: string }>(`/groups/${groupId}`, {
+      method: 'DELETE',
+      token,
+    })
   },
 
   listGroupSessions(token: string, groupId: string) {
     return apiRequest<{ studySessions: ApiStudySession[] }>(
-      `/study-groups/${groupId}/sessions`,
+      `/groups/${groupId}/sessions`,
       { token },
     )
   },
@@ -307,14 +346,11 @@ export const api = {
       meetingLink?: string
     },
   ) {
-    return apiRequest<{ studySession: ApiStudySession }>(
-      `/study-groups/${groupId}/sessions`,
-      {
-        method: 'POST',
-        token,
-        body: JSON.stringify(input),
-      },
-    )
+    return apiRequest<{ studySession: ApiStudySession }>(`/groups/${groupId}/sessions`, {
+      method: 'POST',
+      token,
+      body: JSON.stringify(input),
+    })
   },
 
   listMySessions(token: string) {

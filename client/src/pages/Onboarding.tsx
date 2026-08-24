@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Check, Search, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, Check, Search, Users, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input, Label } from '@/components/ui/input'
@@ -12,7 +12,10 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Wordmark } from '@/components/Wordmark'
-import { cn } from '@/lib/utils'
+import { Card, EmptyState } from '@/components/primitives'
+import { GroupCard } from '@/components/GroupCard'
+import { CreateMissingCourse } from '@/components/AddCourse'
+import { cn, courseVars, plural } from '@/lib/utils'
 import { useApp } from '@/state/AppState'
 
 const MAJORS = [
@@ -58,7 +61,12 @@ export default function Onboarding() {
     )
 
   const groupCount = (code: string) => state.groups.filter((g) => g.courseCode === code).length
-  const matchingGroups = state.groups.filter((g) => selected.includes(g.courseCode)).length
+  const matching = state.groups.filter((g) => selected.includes(g.courseCode))
+  const matchingGroups = matching.length
+  /* The busiest group across the picked courses — the most persuasive one. */
+  const previewGroup = [...matching].sort(
+    (a, b) => (b.memberCount ?? 0) - (a.memberCount ?? 0),
+  )[0]
 
   async function finish() {
     setSubmitting(true)
@@ -78,7 +86,7 @@ export default function Onboarding() {
   }
 
   return (
-    <div className="flex min-h-dvh flex-col bg-background">
+    <div className="flex min-h-dvh flex-col bg-[linear-gradient(135deg,var(--brand-wash),var(--background)_48%,var(--surface-sunken))]">
       <header className="flex h-16 shrink-0 items-center justify-between px-5 sm:px-8">
         <Wordmark />
         <span className="text-[13px] text-muted-foreground">Step {step + 1} of 3</span>
@@ -98,7 +106,7 @@ export default function Onboarding() {
       </div>
 
       <main className="flex flex-1 justify-center px-5 py-10 sm:px-8 sm:py-14">
-        <div className="w-full max-w-xl">
+        <Card variant="raised" className="w-full max-w-xl p-6 sm:p-8">
           {/* ------------------------------------------------ step 1 */}
           {step === 0 && (
             <div className="animate-rise">
@@ -189,7 +197,8 @@ export default function Onboarding() {
                       key={code}
                       type="button"
                       onClick={() => toggle(code)}
-                      className="inline-flex items-center gap-1.5 rounded-full bg-primary-subtle py-1 pl-3 pr-2 text-[13px] font-medium text-primary transition-colors hover:bg-primary-subtle-hover"
+                      style={courseVars(code)}
+                      className="inline-flex items-center gap-1.5 rounded-full bg-(--course-subtle) py-1 pl-3 pr-2 text-[13px] font-semibold text-(--course) transition-opacity hover:opacity-80"
                     >
                       {code}
                       <X className="size-3.5" aria-hidden="true" />
@@ -222,12 +231,17 @@ export default function Onboarding() {
                       onClick={() => toggle(course.code)}
                       aria-pressed={on}
                       className={cn(
-                        'flex w-full items-center gap-4 rounded-lg border px-4 py-3 text-left transition-colors',
+                        'flex w-full items-center gap-4 rounded-xl border px-4 py-3 text-left shadow-xs transition-[background-color,border-color,box-shadow,transform]',
                         on
-                          ? 'border-primary bg-primary-subtle'
-                          : 'border-border bg-surface hover:border-border-strong hover:bg-surface-sunken/60',
+                          ? 'border-primary bg-primary-subtle shadow-sm'
+                          : 'border-border bg-surface hover:-translate-y-0.5 hover:border-border-strong hover:bg-surface-hover hover:shadow-sm',
                       )}
                     >
+                      <span
+                        style={courseVars(course.code)}
+                        className="size-2.5 shrink-0 rounded-full bg-(--course)"
+                        aria-hidden="true"
+                      />
                       <span className="min-w-0 flex-1">
                         <span className="block text-sm font-semibold text-foreground">
                           {course.code}
@@ -237,7 +251,7 @@ export default function Onboarding() {
                         </span>
                         {count > 0 && (
                           <span className="mt-0.5 block text-xs text-faint-foreground">
-                            {count} study {count === 1 ? 'group' : 'groups'}
+                            {plural(count, 'study group')}
                           </span>
                         )}
                       </span>
@@ -256,12 +270,31 @@ export default function Onboarding() {
                   )
                 })}
 
+                {/* Without this, a student whose course isn't seeded cannot finish
+                    signing up at all — Continue stays disabled forever. */}
                 {!state.coursesLoading && !state.coursesError && results.length === 0 && (
-                  <p className="py-10 text-center text-sm text-muted-foreground">
-                    No courses match “{query}”.
-                  </p>
+                  <div className="px-1">
+                    <CreateMissingCourse query={query} onCreated={(course) => toggle(course.code)} />
+                  </div>
                 )}
               </div>
+
+              {selected.length > 0 && (
+                <div className="mt-6">
+                  <h2 className="text-eyebrow text-faint-foreground">What's already happening</h2>
+                  {previewGroup ? (
+                    <GroupCard className="mt-3" group={previewGroup} />
+                  ) : (
+                    <EmptyState
+                      compact
+                      className="mt-3"
+                      icon={Users}
+                      title="No groups in your courses yet"
+                      description="You'd be the first — classmates can find and join what you start."
+                    />
+                  )}
+                </div>
+              )}
 
               <div className="mt-8 flex items-center justify-between gap-3">
                 <Button variant="ghost" size="lg" onClick={() => setStep(0)}>
@@ -294,8 +327,7 @@ export default function Onboarding() {
                 You're ready.
               </h1>
               <p className="mt-2 text-[15px] text-muted-foreground">
-                We found {matchingGroups} active study {matchingGroups === 1 ? 'group' : 'groups'}{' '}
-                across your courses.
+                We found {plural(matchingGroups, 'active study group')} across your courses.
               </p>
 
               <ul className="mt-8 divide-y divide-border border-y border-border">
@@ -303,15 +335,20 @@ export default function Onboarding() {
                   const course = state.courses.find((c) => c.code === code)
                   const count = groupCount(code)
                   return (
-                    <li key={code} className="flex items-center justify-between gap-4 py-3.5">
-                      <div className="min-w-0">
+                    <li key={code} className="flex items-center gap-3 py-3.5">
+                      <span
+                        style={courseVars(code)}
+                        className="size-2.5 shrink-0 rounded-full bg-(--course)"
+                        aria-hidden="true"
+                      />
+                      <div className="min-w-0 flex-1">
                         <p className="text-sm font-medium text-foreground">{code}</p>
                         <p className="truncate text-[13px] text-muted-foreground">
                           {course?.title}
                         </p>
                       </div>
                       <span className="shrink-0 text-[13px] text-muted-foreground">
-                        {count} {count === 1 ? 'group' : 'groups'}
+                        {plural(count, 'group')}
                       </span>
                     </li>
                   )
@@ -329,7 +366,7 @@ export default function Onboarding() {
               </div>
             </div>
           )}
-        </div>
+        </Card>
       </main>
     </div>
   )

@@ -1,9 +1,8 @@
 import * as React from 'react'
-import { Link } from 'react-router-dom'
-import { CalendarPlus, CalendarX } from 'lucide-react'
+import { CalendarX } from 'lucide-react'
 import { Page } from '@/layouts/AppShell'
-import { Button } from '@/components/ui/button'
 import { EmptyState, PageHeader, SectionHeader } from '@/components/primitives'
+import { ScheduleSessionButton } from '@/components/ScheduleSessionButton'
 import { SessionRow } from '@/components/rows'
 import { useApp } from '@/state/AppState'
 import { useMyGroups, useMySessions } from '@/state/selectors'
@@ -12,7 +11,7 @@ export default function SessionsPage() {
   const { state, refreshSessions } = useApp()
   const myGroups = useMyGroups()
   const { upcoming, past } = useMySessions()
-  const names = new Map(state.groups.map((group) => [group.id, group.name]))
+  const groupsById = new Map(state.groups.map((group) => [group.id, group]))
   const firstGroup = myGroups[0]
 
   React.useEffect(() => {
@@ -50,28 +49,21 @@ export default function SessionsPage() {
       <PageHeader
         title="Sessions"
         description="Your upcoming study plans across every group you have joined."
-        action={
-          firstGroup && (
-            <Button asChild variant="primary">
-              <Link to={`/groups/${firstGroup.id}/sessions/new`}>
-                <CalendarPlus />
-                Schedule
-              </Link>
-            </Button>
-          )
-        }
+        action={<ScheduleSessionButton groups={myGroups}>Schedule</ScheduleSessionButton>}
       />
 
       {upcoming.length ? (
         <section>
           <SectionHeader title="Upcoming" count={upcoming.length} />
-          <div className="divide-y divide-border border-y border-border">
+          <div className="space-y-3">
             {upcoming.map((session) => (
               <SessionRow
                 key={session.id}
                 session={session}
+                agenda
+                courseCode={groupsById.get(session.groupId)?.courseCode}
                 showDay
-                showGroup={names.get(session.groupId)}
+                showGroup={groupsById.get(session.groupId)?.name}
               />
             ))}
           </div>
@@ -85,21 +77,26 @@ export default function SessionsPage() {
               ? 'Plan a session with one of your groups and it will show up here.'
               : 'Join a group first, then you can schedule or RSVP to study sessions.'
           }
-          actionLabel={firstGroup ? 'Schedule session' : 'Discover groups'}
-          to={firstGroup ? `/groups/${firstGroup.id}/sessions/new` : '/discover'}
-        />
+          actionLabel={firstGroup ? undefined : 'Discover groups'}
+          to={firstGroup ? undefined : '/discover'}
+        >
+          <ScheduleSessionButton groups={myGroups} variant="secondary" size="sm" icon={false} />
+        </EmptyState>
       )}
 
       {past.length > 0 && (
         <section className="mt-9">
           <SectionHeader title="Past sessions" count={past.length} />
-          <div className="divide-y divide-border border-y border-border">
+          <div className="space-y-2.5">
             {past.map((session) => (
               <SessionRow
                 key={session.id}
                 session={session}
+                agenda
+                past
+                courseCode={groupsById.get(session.groupId)?.courseCode}
                 showDay
-                showGroup={names.get(session.groupId)}
+                showGroup={groupsById.get(session.groupId)?.name}
               />
             ))}
           </div>

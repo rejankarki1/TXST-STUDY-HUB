@@ -34,7 +34,7 @@ function DialogContent({
       <DialogPrimitive.Content
         className={cn(
           'fixed left-1/2 top-1/2 z-50 w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2',
-          'rounded-lg border border-border bg-surface p-6 shadow-md',
+          'rounded-xl border border-border bg-surface-raised p-6 shadow-md',
           'data-[state=open]:animate-pop focus:outline-none',
           className,
         )}
@@ -43,7 +43,7 @@ function DialogContent({
         {children}
         {showClose && (
           <DialogPrimitive.Close
-            className="absolute right-4 top-4 rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-surface-sunken hover:text-foreground"
+            className="absolute right-4 top-4 rounded-lg p-1.5 text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
             aria-label="Close"
           >
             <X className="size-4" />
@@ -66,7 +66,7 @@ function SheetContent({
       <DialogOverlay />
       <DialogPrimitive.Content
         className={cn(
-          'fixed inset-y-0 z-50 flex w-[84%] max-w-xs flex-col border-border bg-surface shadow-md focus:outline-none',
+          'fixed inset-y-0 z-50 flex w-[84%] max-w-xs flex-col border-border bg-surface-raised shadow-md focus:outline-none',
           side === 'left' ? 'left-0 border-r' : 'right-0 border-l',
           'data-[state=open]:animate-fade-in',
           className,

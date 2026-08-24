@@ -1,6 +1,8 @@
 import * as React from 'react'
 import type { Group, GroupMember, RsvpStatus, Session } from '@/data/types'
 import { peopleById, VIEWER_ID } from '@/data/people'
+import type { ApiCourse } from '@/lib/api'
+import { buildCourseTree, groupInCourse } from '@/lib/courses'
 import { useApp } from './AppState'
 
 /* ------------------------------------------------------------- pure bits */
@@ -86,10 +88,48 @@ export function useGroupsCreatedByMe() {
   )
 }
 
+/**
+ * The courses the student is enrolled in. currentUser is authoritative; the two
+ * fallbacks cover demo mode and the window before /auth/me resolves.
+ */
+export function useMyCourses(): ApiCourse[] {
+  const { state } = useApp()
+  const { profile } = state
+  return React.useMemo(() => {
+    if (state.currentUser?.courses.length) return state.currentUser.courses
+    if (profile.courseDetails.length) return profile.courseDetails
+    return profile.courses
+      .map((code) => state.courses.find((course) => course.code === code))
+      .filter((course): course is ApiCourse => Boolean(course))
+  }, [state.currentUser?.courses, profile.courseDetails, profile.courses, state.courses])
+}
+
+/**
+ * Joined groups nested under enrolled courses. See buildCourseTree.
+ *
+ * Enrolment comes from useMyCourses rather than profile.courseDetails directly:
+ * demo mode carries course *codes* with no details, so reading courseDetails
+ * alone left every demo group stranded in the orphan bucket.
+ */
+export function useMyCourseGroups() {
+  const { state } = useApp()
+  const enrolled = useMyCourses()
+  return React.useMemo(
+    () => buildCourseTree(enrolled, state.groups.filter(isMember), state.courses),
+    [state.groups, enrolled, state.courses],
+  )
+}
+
+/* Shared so the no-id early return keeps a stable identity across renders. */
+const NO_SESSIONS: { upcoming: Session[]; past: Session[] } = { upcoming: [], past: [] }
+
 /** Sessions for one group, split into upcoming (soonest first) and past (newest first). */
 export function useGroupSessions(groupId: string | undefined) {
   const { state } = useApp()
   return React.useMemo(() => {
+    /* No group, nothing to scan. Lets a caller that already has the session
+       opt out by passing undefined, instead of paying for a full scan. */
+    if (!groupId) return NO_SESSIONS
     const all = state.sessions.filter((s) => s.groupId === groupId)
     return {
       upcoming: all.filter(upcoming).sort(byStart),
@@ -100,6 +140,26 @@ export function useGroupSessions(groupId: string | undefined) {
 
 export function useNextGroupSession(groupId: string | undefined) {
   return useGroupSessions(groupId).upcoming[0]
+}
+
+/**
+ * Every group's soonest upcoming session, in one pass.
+ *
+ * useNextGroupSession is per-group and rescans state.sessions each time, which
+ * a grid of cards turns into N scans. A page rendering many groups builds this
+ * once and hands each card its own session.
+ */
+export function useNextSessionByGroup(): ReadonlyMap<string, Session> {
+  const { state } = useApp()
+  return React.useMemo(() => {
+    const out = new Map<string, Session>()
+    for (const session of state.sessions) {
+      if (!upcoming(session)) continue
+      const held = out.get(session.groupId)
+      if (!held || byStart(session, held) < 0) out.set(session.groupId, session)
+    }
+    return out
+  }, [state.sessions])
 }
 
 /** Every upcoming session across the groups the viewer belongs to. */
@@ -162,75 +222,11 @@ export function useUnreadNotifications() {
   )
 }
 
-/** Groups the viewer hasn't joined, ranked so their own courses surface first. */
-export function useSuggestedGroups(limit = 2) {
-  const { state } = useApp()
-  return React.useMemo(() => {
-    const enrolled = new Set(state.profile.courses)
-    return state.groups
-      .filter((g) => !isMember(g) && !isFull(g))
-      .sort((a, b) => {
-        const aMine = enrolled.has(a.courseCode) ? 0 : 1
-        const bMine = enrolled.has(b.courseCode) ? 0 : 1
-        if (aMine !== bMine) return aMine - bMine
-        return membersOf(b).length - membersOf(a).length
-      })
-      .slice(0, limit)
-  }, [state.groups, state.profile.courses, limit])
-}
-
-/** The right-rail activity feed: recent messages and newly scheduled sessions. */
-export type ActivityItem = {
-  id: string
-  kind: 'message' | 'session'
-  actorId: string
-  groupId: string
-  groupName: string
-  text: string
-  at: string
-}
-
-export function useActivity(limit = 4) {
-  const { state } = useApp()
-  return React.useMemo(() => {
-    const mine = state.groups.filter(isMember)
-    const names = new Map(mine.map((g) => [g.id, g.name]))
-
-    const fromMessages: ActivityItem[] = state.messages
-      .filter((m) => names.has(m.groupId) && m.authorId !== VIEWER_ID)
-      .map((m) => ({
-        id: `a-${m.id}`,
-        kind: 'message' as const,
-        actorId: m.authorId,
-        groupId: m.groupId,
-        groupName: names.get(m.groupId)!,
-        text: m.body,
-        at: m.sentAt,
-      }))
-
-    const fromSessions: ActivityItem[] = state.sessions
-      .filter((s) => names.has(s.groupId) && s.organizerId !== VIEWER_ID)
-      .map((s) => ({
-        id: `a-${s.id}`,
-        kind: 'session' as const,
-        actorId: s.organizerId,
-        groupId: s.groupId,
-        groupName: names.get(s.groupId)!,
-        text: `scheduled ${s.title}`,
-        at: s.createdAt ?? s.startsAt,
-      }))
-
-    return [...fromMessages, ...fromSessions]
-      .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())
-      .slice(0, limit)
-  }, [state.groups, state.messages, state.sessions, limit])
-}
-
 /** Course-level rollups for the course page and discover chips. */
-export function useCourseStats(courseCode: string) {
+export function useCourseStats(course: { id: string; code: string } | undefined) {
   const { state } = useApp()
   return React.useMemo(() => {
-    const groupsInCourse = state.groups.filter((g) => g.courseCode === courseCode)
+    const groupsInCourse = course ? state.groups.filter((g) => groupInCourse(g, course)) : []
     const studentIds = new Set(groupsInCourse.flatMap((g) => membersOf(g).map((m) => m.id)))
     const groupIds = new Set(groupsInCourse.map((g) => g.id))
     const upcomingSessions = state.sessions
@@ -241,5 +237,5 @@ export function useCourseStats(courseCode: string) {
       studentCount: studentIds.size,
       upcomingSessions,
     }
-  }, [state.groups, state.sessions, courseCode])
+  }, [state.groups, state.sessions, course?.id, course?.code])
 }

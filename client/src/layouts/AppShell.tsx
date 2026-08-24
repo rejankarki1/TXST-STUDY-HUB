@@ -23,7 +23,7 @@ export function AppShell() {
     <div className="flex h-dvh overflow-hidden bg-background">
       <Sidebar className="hidden lg:flex" />
 
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 flex-col bg-[linear-gradient(180deg,var(--background),#f7f4ef_62%,var(--background))]">
         {/* On mobile the chat takes the whole screen — its own header replaces this one. */}
         <MobileHeader className={cn('lg:hidden', inChat && 'hidden')} />
 

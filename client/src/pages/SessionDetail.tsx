@@ -15,11 +15,11 @@ import type { RsvpStatus } from '@/data/types'
 import { Page } from '@/layouts/AppShell'
 import { Button } from '@/components/ui/button'
 import { Avatar } from '@/components/Avatar'
-import { EmptyState } from '@/components/primitives'
+import { CourseTag, EmptyState, Segmented } from '@/components/primitives'
 import { peopleById } from '@/data/people'
-import { courseSlug } from '@/lib/courses'
+import { courseHref } from '@/lib/courses'
 import { fullDate, isPast, timeRange } from '@/lib/format'
-import { cn } from '@/lib/utils'
+import { cn, courseVars } from '@/lib/utils'
 import { useApp } from '@/state/AppState'
 import { isMember, myRsvp, rsvpPeople, useGroup, useSession } from '@/state/selectors'
 
@@ -86,6 +86,9 @@ export default function SessionDetail() {
   const past = isPast(session.startsAt)
   const going = rsvpPeople(session, 'going')
   const maybe = rsvpPeople(session, 'maybe')
+  /* Server-computed; the arrays above are only who we can name. */
+  const goingTotal = session.goingCount ?? going.length
+  const maybeTotal = session.maybeCount ?? maybe.length
   const organizer = session.organizer ?? peopleById[session.organizerId]
   const online = session.mode === 'online'
 
@@ -99,7 +102,10 @@ export default function SessionDetail() {
         {group.name}
       </Link>
 
-      <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-12">
+      <div
+        style={courseVars(group.courseCode)}
+        className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:gap-12"
+      >
         <div>
           {/* ------------------------------------------------------ header */}
           <header>
@@ -111,11 +117,8 @@ export default function SessionDetail() {
                 {group.name}
               </Link>
               <span aria-hidden="true" className="text-border-strong">·</span>
-              <Link
-                to={`/courses/${courseSlug(group.courseCode)}`}
-                className="hover:text-primary"
-              >
-                {group.courseCode}
+              <Link to={courseHref({ code: group.courseCode })}>
+                <CourseTag code={group.courseCode} size="sm" />
               </Link>
               {past && (
                 <>
@@ -128,6 +131,10 @@ export default function SessionDetail() {
             <h1 className="mt-2 text-[28px] font-semibold leading-tight tracking-tight text-foreground">
               {session.title}
             </h1>
+            <span
+              className="mt-4 block h-1 w-12 rounded-full bg-(--course)"
+              aria-hidden="true"
+            />
           </header>
 
           {/* -------------------------------------------------- when/where */}
@@ -212,11 +219,9 @@ export default function SessionDetail() {
           {/* attendance */}
           <div className="mt-6 lg:mt-6">
             <h2 className="text-sm font-semibold text-foreground">
-              {going.length} going
-              {maybe.length > 0 && (
-                <span className="ml-2 font-normal text-muted-foreground">
-                  · {maybe.length} maybe
-                </span>
+              {goingTotal} going
+              {maybeTotal > 0 && (
+                <span className="ml-2 font-normal text-muted-foreground">· {maybeTotal} maybe</span>
               )}
             </h2>
 
@@ -324,37 +329,13 @@ function RsvpBox({
         </p>
       )}
 
-      <div
-        role="group"
-        aria-label="RSVP"
-        className={cn(
-          'grid grid-cols-3 gap-1 rounded-md bg-surface-sunken p-1',
-          !compact && 'mt-3',
-        )}
-      >
-        {OPTIONS.map(({ id, label, icon: Icon }) => {
-          const on = mine === id
-          return (
-            <button
-              key={id}
-              type="button"
-              aria-pressed={on}
-              onClick={() => onChange(id)}
-              className={cn(
-                'inline-flex items-center justify-center gap-1.5 rounded-[5px] py-2 text-[13px] font-medium transition-colors',
-                on
-                  ? id === 'going'
-                    ? 'bg-primary text-primary-foreground shadow-xs'
-                    : 'bg-surface text-foreground shadow-xs'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              <Icon className="size-3.5" aria-hidden="true" />
-              {label}
-            </button>
-          )
-        })}
-      </div>
+      <Segmented
+        label="RSVP"
+        options={OPTIONS}
+        value={mine}
+        onChange={onChange}
+        className={cn('w-full', !compact && 'mt-3')}
+      />
 
       {mine === 'going' && !compact && (
         <p className="mt-3 flex items-center gap-1.5 text-[13px] text-success">

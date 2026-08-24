@@ -1,25 +1,25 @@
 # TXST Study Hub
 
-TXST Study Hub is a full-stack study collaboration app for Texas State students. The current client is a redesigned React/Vite study group experience for finding classmates, joining study groups, scheduling sessions, chatting, and managing RSVPs.
+TXST Study Hub is a full-stack study collaboration app for Texas State students. Students can manage their courses, discover study groups, create or join groups, schedule study sessions, RSVP, chat with group members, and track group activity from a polished React/Vite application backed by an Express, Prisma, and PostgreSQL API.
 
 ## Current Status
 
-- Existing repository history is preserved in this repo.
-- Frontend: redesigned React, TypeScript, Vite, Tailwind CSS app under client/.
-- Backend: Node.js, Express, TypeScript, Prisma, PostgreSQL API under server/.
-- PostgreSQL is now the source of truth for auth, profile/onboarding, selected courses, courses, study groups, memberships, study sessions, and RSVPs.
+- Frontend: React, TypeScript, Vite, Tailwind CSS, Radix UI, and Lucide React under `client/`.
+- Backend: Node.js, Express, TypeScript, Prisma 7, and PostgreSQL under `server/`.
+- Backend feature code is organized as a modular monolith under `server/src/modules/` while shared middleware, Prisma access, utilities, and Express types remain application-level.
+- PostgreSQL is the source of truth for auth, profile/onboarding, selected courses, courses, study groups, memberships, study sessions, and RSVPs.
 - Group messages, unread state, and notifications are still mock/in-memory while the next backend checkpoint is planned.
 
 ## Frontend Features
 
 - Landing, signup, login, onboarding, and demo entry flow
-- Home dashboard
-- Discover groups
-- My groups
-- Course pages
+- Polished Home dashboard with next-session, group, discovery, and activity surfaces
+- Compact Discover group marketplace with search, filters, and join states
+- My Groups and course-based sidebar navigation
+- Course pages with course-prefilled group creation
 - Group overview, chat, sessions, and members tabs
-- Create group
-- Create session
+- Create group limited to courses already added to My Courses
+- Create session from existing groups
 - RSVP controls
 - Real persisted group memberships, sessions, and RSVPs
 - Mock chat replies and typing state
@@ -33,6 +33,27 @@ TXST Study Hub is a full-stack study collaboration app for Texas State students.
 - Backend: Node.js, Express, TypeScript, Prisma 7, PostgreSQL
 - Existing auth backend: JWT access tokens, HTTP-only refresh cookies, bcrypt password hashing
 - Local database: PostgreSQL 16 with Docker Compose
+
+## Backend Shape
+
+The backend keeps a simple request flow:
+
+route -> controller -> service -> Prisma -> PostgreSQL
+
+Feature-specific backend files live in:
+
+- `server/src/modules/auth`
+- `server/src/modules/courses`
+- `server/src/modules/groups`
+- `server/src/modules/sessions`
+
+Shared backend code remains outside modules:
+
+- `server/src/routes/index.ts`
+- `server/src/middleware`
+- `server/src/lib/prisma.ts`
+- `server/src/utils`
+- `server/src/types`
 
 ## Local Setup
 

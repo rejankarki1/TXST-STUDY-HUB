@@ -1,13 +1,15 @@
 import * as React from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Plus } from 'lucide-react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { BookOpen, Plus } from 'lucide-react'
 import { Page } from '@/layouts/AppShell'
+import { AddCourseDialog } from '@/components/AddCourseDialog'
 import { Button } from '@/components/ui/button'
 import { Field, Input, Textarea } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { PageHeader } from '@/components/primitives'
+import { Card, CourseTag, EmptyState, PageHeader } from '@/components/primitives'
 import type { GroupPurpose, MeetingStyle } from '@/data/types'
 import { useApp } from '@/state/AppState'
+import { useMyCourses } from '@/state/selectors'
 
 const PURPOSES: GroupPurpose[] = [
   'Exam prep',
@@ -25,23 +27,31 @@ const MEETING_STYLES: { value: MeetingStyle; label: string }[] = [
 
 export default function CreateGroup() {
   const { state, createGroup } = useApp()
+  const myCourses = useMyCourses()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const courseIdFromQuery = searchParams.get('courseId')
   const [name, setName] = React.useState('')
   const [courseId, setCourseId] = React.useState('')
   const [description, setDescription] = React.useState('')
   const [purpose, setPurpose] = React.useState<GroupPurpose>('Weekly studying')
   const [meetingStyle, setMeetingStyle] = React.useState<MeetingStyle>('flexible')
   const [maxMembers, setMaxMembers] = React.useState(6)
-  const selectedCourse = state.courses.find((course) => course.id === courseId)
+  const [addCourseOpen, setAddCourseOpen] = React.useState(false)
+  const selectedCourse = myCourses.find((course) => course.id === courseId)
+  const showNoCourses = !state.coursesLoading && myCourses.length === 0
 
   React.useEffect(() => {
-    if (courseId || state.courses.length === 0) return
+    if (courseId || !courseIdFromQuery || myCourses.length === 0) return
 
-    const selectedUserCourse = state.courses.find((course) =>
-      state.profile.courses.includes(course.code),
-    )
-    setCourseId((selectedUserCourse ?? state.courses[0]).id)
-  }, [courseId, state.courses, state.profile.courses])
+    const courseFromQuery = myCourses.find((course) => course.id === courseIdFromQuery)
+    if (courseFromQuery) setCourseId(courseFromQuery.id)
+  }, [courseId, courseIdFromQuery, myCourses])
+
+  React.useEffect(() => {
+    if (!courseId) return
+    if (!myCourses.some((course) => course.id === courseId)) setCourseId('')
+  }, [courseId, myCourses])
 
   const [submitting, setSubmitting] = React.useState(false)
 
@@ -73,106 +83,117 @@ export default function CreateGroup() {
       <PageHeader
         title="Create group"
         description="Start a course-based group that classmates can discover and join."
+        action={selectedCourse ? <CourseTag code={selectedCourse.code} /> : undefined}
       />
 
-      <form onSubmit={submit} className="space-y-5">
-        <Field label="Group name" htmlFor="name">
-          <Input
-            id="name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="Data structures exam prep"
+      <Card variant="raised">
+        {showNoCourses ? (
+          <EmptyState
+            compact
+            icon={BookOpen}
+            title="No courses added yet."
+            description="Add a course before creating a study group."
+            actionLabel="Add course"
+            onAction={() => setAddCourseOpen(true)}
           />
-        </Field>
-
-        <Field label="Course" htmlFor="course">
-          <Select value={courseId} onValueChange={setCourseId} disabled={state.coursesLoading}>
-            <SelectTrigger id="course">
-              <SelectValue
-                placeholder={state.coursesLoading ? 'Loading courses...' : 'Choose a course'}
+        ) : (
+          <form onSubmit={submit} className="space-y-5">
+            <Field label="Group name" htmlFor="name">
+              <Input
+                id="name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                placeholder="Data structures exam prep"
               />
-            </SelectTrigger>
-            <SelectContent>
-              {state.courses.map((course) => (
-                <SelectItem key={course.id} value={course.id}>
-                  {course.code} · {course.title}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {state.coursesError && (
-            <p className="mt-1.5 text-[13px] text-danger">{state.coursesError}</p>
-          )}
-          {!state.coursesLoading && !state.coursesError && state.courses.length === 0 && (
-            <p className="mt-1.5 text-[13px] text-muted-foreground">
-              No courses are available yet.
-            </p>
-          )}
-        </Field>
+            </Field>
 
-        <Field label="Description" htmlFor="description">
-          <Textarea
-            id="description"
-            rows={4}
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            placeholder="What will this group work on?"
-          />
-        </Field>
+            <Field label="Course" htmlFor="course">
+              <Select value={courseId} onValueChange={setCourseId} disabled={state.coursesLoading}>
+                <SelectTrigger id="course">
+                  <SelectValue
+                    placeholder={state.coursesLoading ? 'Loading courses...' : 'Choose a course'}
+                  />
+                </SelectTrigger>
+                <SelectContent>
+                  {myCourses.map((course) => (
+                    <SelectItem key={course.id} value={course.id}>
+                      {course.code} · {course.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {state.coursesError && (
+                <p className="mt-1.5 text-[13px] text-danger">{state.coursesError}</p>
+              )}
+            </Field>
 
-        <div className="grid gap-5 sm:grid-cols-2">
-          <Field label="Purpose" htmlFor="purpose">
-            <Select value={purpose} onValueChange={(value) => setPurpose(value as GroupPurpose)}>
-              <SelectTrigger id="purpose">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {PURPOSES.map((item) => (
-                  <SelectItem key={item} value={item}>
-                    {item}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
+            <Field label="Description" htmlFor="description">
+              <Textarea
+                id="description"
+                rows={4}
+                value={description}
+                onChange={(event) => setDescription(event.target.value)}
+                placeholder="What will this group work on?"
+              />
+            </Field>
 
-          <Field label="Meeting style" htmlFor="meeting-style">
-            <Select
-              value={meetingStyle}
-              onValueChange={(value) => setMeetingStyle(value as MeetingStyle)}
-            >
-              <SelectTrigger id="meeting-style">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {MEETING_STYLES.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>
-                    {item.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-        </div>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <Field label="Purpose" htmlFor="purpose">
+                <Select value={purpose} onValueChange={(value) => setPurpose(value as GroupPurpose)}>
+                  <SelectTrigger id="purpose">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PURPOSES.map((item) => (
+                      <SelectItem key={item} value={item}>
+                        {item}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
 
-        <Field label="Member limit" htmlFor="max-members" hint="3-12">
-          <Input
-            id="max-members"
-            type="number"
-            min={3}
-            max={12}
-            value={maxMembers}
-            onChange={(event) => setMaxMembers(Number(event.target.value))}
-          />
-        </Field>
+              <Field label="Meeting style" htmlFor="meeting-style">
+                <Select
+                  value={meetingStyle}
+                  onValueChange={(value) => setMeetingStyle(value as MeetingStyle)}
+                >
+                  <SelectTrigger id="meeting-style">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MEETING_STYLES.map((item) => (
+                      <SelectItem key={item.value} value={item.value}>
+                        {item.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
 
-        <div className="flex justify-end">
-          <Button type="submit" variant="primary" disabled={!selectedCourse || submitting}>
-            <Plus />
-            {submitting ? 'Creating...' : 'Create group'}
-          </Button>
-        </div>
-      </form>
+            <Field label="Member limit" htmlFor="max-members" hint="3-12">
+              <Input
+                id="max-members"
+                type="number"
+                min={3}
+                max={12}
+                value={maxMembers}
+                onChange={(event) => setMaxMembers(Number(event.target.value))}
+              />
+            </Field>
+
+            <div className="flex justify-end">
+              <Button type="submit" variant="primary" disabled={!selectedCourse || submitting}>
+                <Plus />
+                {submitting ? 'Creating...' : 'Create group'}
+              </Button>
+            </div>
+          </form>
+        )}
+      </Card>
+
+      <AddCourseDialog open={addCourseOpen} onOpenChange={setAddCourseOpen} />
     </Page>
   )
 }

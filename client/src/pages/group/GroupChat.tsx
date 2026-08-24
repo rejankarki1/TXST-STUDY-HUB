@@ -78,12 +78,12 @@ export default function GroupChat() {
   const rows = buildRows(messages, unreadAnchor)
 
   return (
-    <div className="flex h-full flex-col bg-surface lg:border-t lg:border-border">
+    <div className="flex h-full flex-col bg-surface-raised lg:border-t lg:border-border">
       {/* Mobile header — the desktop one lives in GroupLayout. */}
       <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border px-2 lg:hidden">
         <Link
           to={`/groups/${group.id}`}
-          className="flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-sunken hover:text-foreground"
+          className="flex size-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
           aria-label="Back to group"
         >
           <ArrowLeft className="size-5" />
@@ -96,7 +96,7 @@ export default function GroupChat() {
         </div>
         <Link
           to={`/groups/${group.id}/members`}
-          className="flex size-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-sunken hover:text-foreground"
+          className="flex size-10 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
           aria-label="View members"
         >
           <Users className="size-[18px]" />
@@ -125,11 +125,17 @@ export default function GroupChat() {
       </div>
 
       {/* composer */}
-      {joined ? (
-        <Composer
-          groupName={group.name}
-          onSend={(body) => sendMessage(group.id, body)}
-        />
+      {joined && state.demoMode ? (
+        <Composer groupName={group.name} onSend={(body) => sendMessage(group.id, body)} />
+      ) : joined ? (
+        /* No messages endpoint exists yet. Showing a live composer here would
+           accept a message and silently drop it on the next reload. */
+        <div className="safe-bottom shrink-0 border-t border-border px-4 py-4">
+          <div className="mx-auto flex max-w-3xl items-center gap-2 text-[13px] text-muted-foreground">
+            <Lock className="size-4 shrink-0" aria-hidden="true" />
+            Group chat isn't switched on yet — sessions are the way to plan for now.
+          </div>
+        </div>
       ) : (
         <div className="safe-bottom shrink-0 border-t border-border px-4 py-4">
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-4">
@@ -156,7 +162,7 @@ function MessageRow({ message, grouped }: { message: Message; grouped: boolean }
   return (
     <div
       className={cn(
-        'group/message relative -mx-2 rounded-md px-2 transition-colors hover:bg-surface-sunken/70',
+        'group/message relative -mx-2 rounded-lg px-2 transition-colors hover:bg-surface-hover',
         grouped ? 'py-0.5' : 'mt-4 py-1 first:mt-0',
       )}
     >
@@ -296,12 +302,12 @@ function Composer({
   }
 
   return (
-    <div className="safe-bottom shrink-0 border-t border-border bg-surface px-3 py-3 sm:px-5">
+    <div className="safe-bottom shrink-0 border-t border-border bg-surface-raised px-3 py-3 shadow-[0_-8px_24px_-22px_rgb(28_26_25_/_0.5)] sm:px-5">
       <div className="mx-auto max-w-3xl">
-        <div className="flex items-end gap-2 rounded-lg border border-border-strong bg-surface px-2 py-1.5 transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15">
+        <div className="flex items-end gap-2 rounded-xl border border-border-strong bg-surface px-2 py-1.5 shadow-xs transition-colors focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/15">
           <button
             type="button"
-            className="hidden size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-surface-sunken hover:text-foreground sm:flex"
+            className="hidden size-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground sm:flex"
             aria-label="Attach a file"
             tabIndex={-1}
           >

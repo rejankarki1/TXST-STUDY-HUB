@@ -18,7 +18,7 @@ function PopoverContent({
         align={align}
         sideOffset={sideOffset}
         className={cn(
-          'z-50 rounded-lg border border-border bg-surface shadow-md focus:outline-none',
+          'z-50 rounded-xl border border-border bg-surface-raised shadow-md focus:outline-none',
           'data-[state=open]:animate-rise',
           className,
         )}

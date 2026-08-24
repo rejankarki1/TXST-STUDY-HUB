@@ -30,6 +30,11 @@ export type Group = {
   name: string
   courseId?: string
   courseCode: string
+  course?: {
+    id: string
+    code: string
+    title: string
+  }
   description: string
   purpose: GroupPurpose
   meetingStyle: MeetingStyle

@@ -1,7 +1,8 @@
 import { Calendar, Check, Clock, MapPin, Send } from 'lucide-react'
 import { Avatar, AvatarStack } from '@/components/Avatar'
 import { peopleById } from '@/data/people'
-import { cn } from '@/lib/utils'
+import { CourseTag } from '@/components/primitives'
+import { cn, courseVars } from '@/lib/utils'
 
 /**
  * Static, non-interactive slices of the real product used on the landing page.
@@ -21,7 +22,7 @@ export function HeroPreview({ className }: { className?: string }) {
       <div className="overflow-hidden rounded-xl border border-border bg-surface shadow-md">
         {/* group header */}
         <div className="border-b border-border px-5 py-4 sm:px-6">
-          <p className="text-eyebrow text-muted-foreground">CS 2308</p>
+          <CourseTag code="CS 2308" />
           <h3 className="mt-1 text-[17px] font-semibold tracking-tight text-foreground">
             Data Structures Grind
           </h3>
@@ -32,16 +33,16 @@ export function HeroPreview({ className }: { className?: string }) {
         </div>
 
         {/* next session */}
-        <div className="bg-primary-subtle px-5 py-4 sm:px-6">
-          <p className="text-eyebrow text-primary">Next session</p>
+        <div style={courseVars('CS 2308')} className="bg-(--course-subtle) px-5 py-4 sm:px-6">
+          <p className="text-eyebrow text-(--course)">Next session</p>
           <p className="mt-1.5 text-[15px] font-semibold text-foreground">Exam 1 Review</p>
           <div className="mt-2.5 space-y-1.5 text-[13px]">
             <p className="flex items-center gap-2 text-foreground-soft">
-              <Clock className="size-3.5 shrink-0 text-primary/70" aria-hidden="true" />
+              <Clock className="size-3.5 shrink-0 text-(--course)" aria-hidden="true" />
               Tonight · 6:00 – 8:00 PM
             </p>
             <p className="flex items-center gap-2 text-foreground-soft">
-              <MapPin className="size-3.5 shrink-0 text-primary/70" aria-hidden="true" />
+              <MapPin className="size-3.5 shrink-0 text-(--course)" aria-hidden="true" />
               Alkek Library · 4th Floor
             </p>
           </div>
@@ -51,8 +52,15 @@ export function HeroPreview({ className }: { className?: string }) {
           </div>
         </div>
 
-        {/* chat preview */}
-        <div className="space-y-3 px-5 py-4 sm:px-6">
+        {/* chat preview — faded at the bottom edge so the card reads as a
+            window into a longer screen rather than a cut-off screenshot. */}
+        <div
+          className="space-y-3 px-5 py-4 sm:px-6"
+          style={{
+            maskImage: 'linear-gradient(to bottom, #000 55%, transparent 100%)',
+            WebkitMaskImage: 'linear-gradient(to bottom, #000 55%, transparent 100%)',
+          }}
+        >
           <ChatLine person={p('p2')} text="Did everyone finish question 4?" at="5:42 PM" />
           <ChatLine person={p('p3')} text="I'm still stuck on the linked list part" at="5:44 PM" />
           <ChatLine person={p('p1')} text="I can walk through it when we meet" at="5:46 PM" />
@@ -100,7 +108,7 @@ function ChatLine({
 export function GroupCardPreview() {
   return (
     <div className="rounded-lg border border-border bg-surface p-5 shadow-xs">
-      <p className="text-eyebrow text-muted-foreground">MATH 2472</p>
+      <CourseTag code="MATH 2472" />
       <h4 className="mt-1.5 text-[15px] font-semibold tracking-tight text-foreground">
         Calc II Final Prep
       </h4>

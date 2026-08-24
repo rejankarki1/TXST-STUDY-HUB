@@ -13,33 +13,6 @@ enum UserRole {
   ADMIN
 }
 
-enum PostType {
-  QUESTION
-  NOTE
-  RESOURCE
-}
-
-enum PostStatus {
-  OPEN
-  RESOLVED
-  ARCHIVED
-}
-
-enum ExperienceDifficulty {
-  EASY
-  MEDIUM
-  HARD
-}
-
-enum ResourceType {
-  VIDEO
-  PRACTICE
-  DOCUMENTATION
-  GUIDE
-  TOOL
-  OFFICIAL
-}
-
 enum GroupPurpose {
   EXAM_PREP
   HOMEWORK
@@ -65,6 +38,14 @@ enum SessionRsvpStatus {
   CANT
 }
 
+/// Membership rights inside one study group. The creator holds OWNER; everyone
+/// who joins is a MEMBER. Kept deliberately small — anything finer grained is a
+/// permissions model, not a membership role.
+enum GroupRole {
+  OWNER
+  MEMBER
+}
+
 enum NotificationKind {
   SESSION
   MESSAGE
@@ -78,12 +59,11 @@ model User {
   name                  String?
   passwordHash          String
   role                  UserRole           @default(STUDENT)
+  avatarUrl             String?
+  bio                   String?
   major                 String?
   gradYear              Int?
   onboardingCompleted   Boolean            @default(false)
-  posts                 Post[]
-  answers               Answer[]
-  experiences           CourseExperience[]
   selectedCourses       UserCourse[]
   createdStudyGroups    StudyGroup[]       @relation("StudyGroupCreator")
   studyGroupMemberships StudyGroupMember[]
@@ -113,8 +93,6 @@ model Course {
   description  String?
   departmentId String?
   department   Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  posts        Post[]
-  experiences  CourseExperience[]
   selectedBy   UserCourse[]
   studyGroups  StudyGroup[]
   createdAt    DateTime           @default(now())
@@ -132,59 +110,6 @@ model UserCourse {
   @@unique([userId, courseId])
   @@index([userId])
   @@index([courseId])
-}
-
-model Post {
-  id               String     @id @default(uuid())
-  title            String
-  body             String
-  type             PostType   @default(QUESTION)
-  status           PostStatus @default(OPEN)
-  acceptedAnswerId String?
-  authorId         String
-  courseId         String
-  author           User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  course           Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  answers          Answer[]
-  resource         Resource?
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
-}
-
-model Answer {
-  id        String   @id @default(uuid())
-  body      String
-  postId    String
-  authorId  String
-  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
-  author    User     @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-}
-
-model CourseExperience {
-  id            String               @id @default(uuid())
-  title         String
-  body          String
-  difficulty    ExperienceDifficulty
-  professorName String?
-  term          String?
-  courseId      String
-  authorId      String
-  course        Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  author        User                 @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
-}
-
-model Resource {
-  id           String       @id @default(uuid())
-  url          String
-  resourceType ResourceType
-  postId       String       @unique
-  post         Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
 }
 
 model StudyGroup {
@@ -213,6 +138,7 @@ model StudyGroupMember {
   id           String     @id @default(uuid())
   studyGroupId String
   userId       String
+  role         GroupRole  @default(MEMBER)
   joinedAt     DateTime   @default(now())
   lastReadAt   DateTime?
   studyGroup   StudyGroup @relation(fields: [studyGroupId], references: [id], onDelete: Cascade)
@@ -267,10 +193,14 @@ model GroupMessage {
   group     StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
   author    User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
   createdAt DateTime   @default(now())
+  /// Present so message editing can be added without another migration.
+  updatedAt DateTime   @updatedAt
 
   @@index([groupId, createdAt])
 }
 
+/// Read state is per-notification via readAt; no aggregate unread counter is
+/// stored, so "unread" is always derived from readAt IS NULL.
 model Notification {
   id        String           @id @default(uuid())
   userId    String
@@ -278,7 +208,8 @@ model Notification {
   actorId   String?
   groupId   String?
   sessionId String?
-  text      String
+  title     String
+  message   String
   readAt    DateTime?
   createdAt DateTime         @default(now())
   user      User             @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
