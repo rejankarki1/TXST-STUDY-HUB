@@ -187,12 +187,26 @@ export default function Landing() {
         </div>
       </section>
 
-      <footer className="border-t border-border">
-        <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-4 px-5 py-8 sm:flex-row sm:px-8">
-          <Wordmark size="sm" />
-          <p className="text-center text-xs text-faint-foreground sm:text-right">
-            Made for Texas State students. Not affiliated with Texas State University.
-          </p>
+      <footer className="border-t border-border bg-surface">
+        <div className="mx-auto max-w-6xl px-5 py-6 sm:px-8">
+          <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <Wordmark size="sm" />
+              <p className="mt-2 text-[13px] text-muted-foreground">
+                Study together. Stay on track.
+              </p>
+            </div>
+
+            <div className="space-y-1 text-[13px] leading-5 text-muted-foreground sm:text-right">
+              <p>Built for Texas State students.</p>
+              <p>Independent student project.</p>
+              <p>Not affiliated with Texas State University.</p>
+            </div>
+          </div>
+
+          <div className="mt-5 border-t border-border pt-4">
+            <p className="text-xs text-faint-foreground">© 2026 TXST Study</p>
+          </div>
         </div>
       </footer>
     </div>

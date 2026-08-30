@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { ArrowLeft, Lock, Paperclip, Send, Smile, Users } from 'lucide-react'
-import type { Message } from '@/data/types'
+import type { GroupMember, Message } from '@/data/types'
 import { Avatar } from '@/components/Avatar'
 import { Button } from '@/components/ui/button'
 import { peopleById, VIEWER_ID } from '@/data/people'
@@ -12,6 +12,7 @@ import { isMember, membersOf, useGroup, useGroupMessages } from '@/state/selecto
 
 /** Consecutive messages from one person within this window get grouped. */
 const GROUPING_WINDOW_MS = 5 * 60 * 1000
+const MESSAGE_POLL_MS = 4000
 
 type Row =
   | { kind: 'day'; id: string; iso: string }
@@ -49,11 +50,16 @@ function buildRows(messages: Message[], firstUnreadId: string | null): Row[] {
 export default function GroupChat() {
   const { groupId } = useParams()
   const group = useGroup(groupId)
-  const { state, sendMessage, markGroupRead } = useApp()
+  const { state, loadGroupMessages, sendMessage, markGroupRead } = useApp()
   const messages = useGroupMessages(groupId)
 
   const scrollRef = React.useRef<HTMLDivElement>(null)
   const bottomRef = React.useRef<HTMLDivElement>(null)
+  const loadMessagesRef = React.useRef(loadGroupMessages)
+
+  React.useEffect(() => {
+    loadMessagesRef.current = loadGroupMessages
+  }, [loadGroupMessages])
 
   /* The unread marker is frozen on entry — it shouldn't jump while you read. */
   const [unreadAnchor] = React.useState(() => {
@@ -67,6 +73,17 @@ export default function GroupChat() {
   }, [groupId, markGroupRead])
 
   React.useEffect(() => {
+    if (!groupId || !group?.isMember || state.demoMode) return
+
+    void loadMessagesRef.current(groupId).catch(() => undefined)
+    const id = window.setInterval(() => {
+      void loadMessagesRef.current(groupId).catch(() => undefined)
+    }, MESSAGE_POLL_MS)
+
+    return () => window.clearInterval(id)
+  }, [groupId, group?.isMember, state.demoMode])
+
+  React.useEffect(() => {
     bottomRef.current?.scrollIntoView({ block: 'end' })
   }, [messages.length, state.typingIn])
 
@@ -76,6 +93,16 @@ export default function GroupChat() {
   const members = membersOf(group)
   const typing = state.typingIn === group.id
   const rows = buildRows(messages, unreadAnchor)
+  const viewerId = state.demoMode ? VIEWER_ID : state.currentUser?.id
+  const authors = new Map<string, Pick<GroupMember, 'id' | 'name'>>(
+    members.map((member) => [member.id, member]),
+  )
+  if (state.currentUser) {
+    authors.set(state.currentUser.id, {
+      id: state.currentUser.id,
+      name: state.currentUser.name ?? state.currentUser.email,
+    })
+  }
 
   return (
     <div className="flex h-full flex-col bg-surface-raised lg:border-t lg:border-border">
@@ -114,7 +141,15 @@ export default function GroupChat() {
               {rows.map((row) => {
                 if (row.kind === 'day') return <DaySeparator key={row.id} iso={row.iso} />
                 if (row.kind === 'unread') return <UnreadDivider key={row.id} />
-                return <MessageRow key={row.id} message={row.message} grouped={row.grouped} />
+                return (
+                  <MessageRow
+                    key={row.id}
+                    message={row.message}
+                    grouped={row.grouped}
+                    author={authors.get(row.message.authorId)}
+                    viewerId={viewerId}
+                  />
+                )
               })}
             </>
           )}
@@ -125,17 +160,8 @@ export default function GroupChat() {
       </div>
 
       {/* composer */}
-      {joined && state.demoMode ? (
+      {joined ? (
         <Composer groupName={group.name} onSend={(body) => sendMessage(group.id, body)} />
-      ) : joined ? (
-        /* No messages endpoint exists yet. Showing a live composer here would
-           accept a message and silently drop it on the next reload. */
-        <div className="safe-bottom shrink-0 border-t border-border px-4 py-4">
-          <div className="mx-auto flex max-w-3xl items-center gap-2 text-[13px] text-muted-foreground">
-            <Lock className="size-4 shrink-0" aria-hidden="true" />
-            Group chat isn't switched on yet — sessions are the way to plan for now.
-          </div>
-        </div>
       ) : (
         <div className="safe-bottom shrink-0 border-t border-border px-4 py-4">
           <div className="mx-auto flex max-w-3xl items-center justify-between gap-4">
@@ -155,9 +181,19 @@ export default function GroupChat() {
 
 /* -------------------------------------------------------------- messages */
 
-function MessageRow({ message, grouped }: { message: Message; grouped: boolean }) {
-  const person = peopleById[message.authorId]
-  const isMine = message.authorId === VIEWER_ID
+function MessageRow({
+  message,
+  grouped,
+  author,
+  viewerId,
+}: {
+  message: Message
+  grouped: boolean
+  author?: Pick<GroupMember, 'id' | 'name'>
+  viewerId?: string
+}) {
+  const person = author ?? peopleById[message.authorId]
+  const isMine = message.authorId === viewerId
 
   return (
     <div
@@ -280,9 +316,10 @@ function Composer({
   onSend,
 }: {
   groupName: string
-  onSend: (body: string) => void
+  onSend: (body: string) => Promise<void> | void
 }) {
   const [value, setValue] = React.useState('')
+  const [sending, setSending] = React.useState(false)
   const textareaRef = React.useRef<HTMLTextAreaElement>(null)
 
   /* Auto-grow, capped so the transcript never disappears behind the composer. */
@@ -293,12 +330,17 @@ function Composer({
     el.style.height = `${Math.min(el.scrollHeight, 160)}px`
   }, [value])
 
-  function send() {
+  async function send() {
     const body = value.trim()
-    if (!body) return
-    onSend(body)
-    setValue('')
-    textareaRef.current?.focus()
+    if (!body || sending) return
+    setSending(true)
+    try {
+      await onSend(body)
+      setValue('')
+      textareaRef.current?.focus()
+    } finally {
+      setSending(false)
+    }
   }
 
   return (
@@ -326,7 +368,7 @@ function Composer({
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
-                send()
+                void send()
               }
             }}
             placeholder={`Message ${groupName}…`}
@@ -344,12 +386,12 @@ function Composer({
 
           <button
             type="button"
-            onClick={send}
-            disabled={!value.trim()}
+            onClick={() => void send()}
+            disabled={!value.trim() || sending}
             aria-label="Send message"
             className={cn(
               'flex size-8 shrink-0 items-center justify-center rounded-md transition-colors',
-              value.trim()
+              value.trim() && !sending
                 ? 'bg-primary text-primary-foreground hover:bg-primary-hover'
                 : 'text-faint-foreground',
             )}

@@ -127,6 +127,14 @@ export type ApiStudySession = {
   cantCount: number
 }
 
+export type ApiGroupMessage = {
+  id: string
+  groupId: string
+  authorId: string
+  body: string
+  sentAt: string
+}
+
 async function apiRequest<T>(
   path: string,
   options: RequestInit & { token?: string | null } = {},
@@ -283,6 +291,20 @@ export const api = {
   listStudyGroupMembers(token: string, groupId: string) {
     return apiRequest<{ members: ApiStudyGroupMember[] }>(`/groups/${groupId}/members`, {
       token,
+    })
+  },
+
+  listGroupMessages(token: string, groupId: string) {
+    return apiRequest<{ messages: ApiGroupMessage[] }>(`/groups/${groupId}/messages`, {
+      token,
+    })
+  },
+
+  sendGroupMessage(token: string, groupId: string, input: { body: string }) {
+    return apiRequest<{ message: ApiGroupMessage }>(`/groups/${groupId}/messages`, {
+      method: 'POST',
+      token,
+      body: JSON.stringify(input),
     })
   },
 

@@ -22,4 +22,9 @@ export const createGroupSchema = z.object({
   maxMembers: z.coerce.number().int().min(3).max(12),
 });
 
+export const createGroupMessageSchema = z.object({
+  body: z.string().trim().min(1).max(1000),
+});
+
 export type CreateGroupInput = z.infer<typeof createGroupSchema>;
+export type CreateGroupMessageInput = z.infer<typeof createGroupMessageSchema>;

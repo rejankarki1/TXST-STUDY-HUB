@@ -2,7 +2,7 @@ import type { RequestHandler } from "express";
 
 import { currentUser } from "../../middleware/auth.js";
 import * as groups from "./groups.service.js";
-import type { CreateGroupInput } from "./groups.schema.js";
+import type { CreateGroupInput, CreateGroupMessageInput } from "./groups.schema.js";
 
 export const listGroups: RequestHandler = async (req, res) => {
   const user = currentUser(req);
@@ -38,12 +38,34 @@ export const listGroupMembers: RequestHandler<{ groupId: string }> = async (req,
   });
 };
 
+export const listGroupMessages: RequestHandler<{ groupId: string }> = async (req, res) => {
+  const user = currentUser(req);
+  res.json({
+    success: true,
+    data: { messages: await groups.listGroupMessages(user.id, req.params.groupId) },
+  });
+};
+
 export const createGroup: RequestHandler = async (req, res) => {
   const studyGroup = await groups.createGroup(currentUser(req).id, req.body as CreateGroupInput);
   res.status(201).json({
     success: true,
     message: "Study group created",
     data: { studyGroup },
+  });
+};
+
+export const createGroupMessage: RequestHandler<{ groupId: string }> = async (req, res) => {
+  const message = await groups.createGroupMessage(
+    currentUser(req).id,
+    req.params.groupId,
+    req.body as CreateGroupMessageInput,
+  );
+
+  res.status(201).json({
+    success: true,
+    message: "Message sent",
+    data: { message },
   });
 };
 

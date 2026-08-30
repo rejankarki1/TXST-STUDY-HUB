@@ -6,6 +6,9 @@ coverage
 !.env.example
 .DS_Store
 *.tsbuildinfo
+*.log
+.vscode/
+.idea/
 server/generated/prisma
 server/src/generated/prisma
 server/prisma/*.db

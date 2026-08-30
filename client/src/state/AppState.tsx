@@ -23,6 +23,7 @@ import {
   ApiError,
   type ApiCourse,
   type ApiDepartment,
+  type ApiGroupMessage,
   type ApiStudyGroup,
   type ApiStudySession,
   type CurrentUser,
@@ -90,6 +91,8 @@ type Action =
   | { type: 'SIGN_OUT' }
   | { type: 'ENTER_DEMO' }
   | { type: 'SET_RSVP'; sessionId: string; status: RsvpStatus }
+  | { type: 'GROUP_MESSAGES_SUCCESS'; groupId: string; messages: Message[] }
+  | { type: 'UPSERT_MESSAGE'; message: Message }
   | { type: 'SEND_MESSAGE'; message: Message }
   | { type: 'RECEIVE_MESSAGE'; message: Message }
   | { type: 'SET_TYPING'; groupId: string | null }
@@ -239,6 +242,16 @@ function sessionFromApi(session: ApiStudySession): Session {
     maybeCount: session.maybeCount,
     cantCount: session.cantCount,
     createdAt: session.createdAt,
+  }
+}
+
+function messageFromApi(message: ApiGroupMessage): Message {
+  return {
+    id: message.id,
+    groupId: message.groupId,
+    authorId: message.authorId,
+    body: message.body,
+    sentAt: message.sentAt,
   }
 }
 
@@ -476,6 +489,27 @@ function reducer(state: AppState, action: Action): AppState {
         ),
       }
 
+    case 'GROUP_MESSAGES_SUCCESS':
+      return {
+        ...state,
+        messages: [
+          ...state.messages.filter((message) => message.groupId !== action.groupId),
+          ...action.messages,
+        ],
+      }
+
+    case 'UPSERT_MESSAGE': {
+      const exists = state.messages.some((message) => message.id === action.message.id)
+      return {
+        ...state,
+        messages: exists
+          ? state.messages.map((message) =>
+              message.id === action.message.id ? action.message : message,
+            )
+          : [...state.messages, action.message],
+      }
+    }
+
     case 'SEND_MESSAGE':
       return { ...state, messages: [...state.messages, action.message] }
 
@@ -575,7 +609,8 @@ type AppApi = {
   leaveGroup: (groupId: string) => Promise<void>
   deleteGroup: (groupId: string) => Promise<void>
   setRsvp: (sessionId: string, status: RsvpStatus) => Promise<void>
-  sendMessage: (groupId: string, body: string) => void
+  loadGroupMessages: (groupId: string) => Promise<void>
+  sendMessage: (groupId: string, body: string) => Promise<void>
   createGroup: (input: NewGroupInput) => Promise<string>
   createSession: (input: NewSessionInput) => Promise<string>
   markGroupRead: (groupId: string) => void
@@ -1063,11 +1098,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       },
 
-      /* Demo only. There is no messages endpoint, so a real account must never
-         see a fabricated conversation — the composer is disabled for them and
-         this is a no-op if it is ever called anyway. */
-      sendMessage: (groupId, body) => {
-        if (!stateRef.current.demoMode) return
+      loadGroupMessages: async (groupId) => {
+        const token = stateRef.current.accessToken
+        if (!token || stateRef.current.demoMode) return
+
+        try {
+          const { messages } = await api.listGroupMessages(token, groupId)
+          dispatch({
+            type: 'GROUP_MESSAGES_SUCCESS',
+            groupId,
+            messages: messages.map(messageFromApi),
+          })
+        } catch (error) {
+          toast.error(error instanceof Error ? error.message : 'Could not load chat messages')
+          throw error
+        }
+      },
+
+      sendMessage: async (groupId, body) => {
+        if (!stateRef.current.demoMode) {
+          const token = stateRef.current.accessToken
+          if (!token) throw new Error('Authentication required')
+
+          try {
+            const { message } = await api.sendGroupMessage(token, groupId, { body })
+            dispatch({ type: 'UPSERT_MESSAGE', message: messageFromApi(message) })
+          } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Could not send message')
+            throw error
+          }
+          return
+        }
 
         dispatch({
           type: 'SEND_MESSAGE',

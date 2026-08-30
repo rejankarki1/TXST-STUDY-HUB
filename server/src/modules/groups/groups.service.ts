@@ -2,6 +2,7 @@ import { GroupPurpose, MeetingStyle } from "../../generated/prisma/enums.js";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../middleware/error.js";
 import type {
+  CreateGroupMessageInput,
   CreateGroupInput,
   FrontendGroupPurpose,
   FrontendMeetingStyle,
@@ -72,6 +73,18 @@ type SelectedGroup = NonNullable<
   Awaited<ReturnType<typeof prisma.studyGroup.findFirst<{ select: typeof groupSelect }>>>
 >;
 
+const messageSelect = {
+  id: true,
+  groupId: true,
+  authorId: true,
+  body: true,
+  createdAt: true,
+};
+
+type SelectedMessage = NonNullable<
+  Awaited<ReturnType<typeof prisma.groupMessage.findFirst<{ select: typeof messageSelect }>>>
+>;
+
 function formatGroup(group: SelectedGroup, currentUserId?: string) {
   const memberCount = group._count.members;
 
@@ -104,6 +117,37 @@ function formatGroup(group: SelectedGroup, currentUserId?: string) {
       : false,
     isCreator: currentUserId ? group.creatorId === currentUserId : false,
   };
+}
+
+function formatMessage(message: SelectedMessage) {
+  return {
+    id: message.id,
+    groupId: message.groupId,
+    authorId: message.authorId,
+    body: message.body,
+    sentAt: message.createdAt.toISOString(),
+  };
+}
+
+async function requireGroupMember(currentUserId: string, groupId: string) {
+  const group = await prisma.studyGroup.findUnique({
+    where: { id: groupId },
+    select: {
+      id: true,
+      members: {
+        where: { userId: currentUserId },
+        select: { id: true },
+      },
+    },
+  });
+
+  if (!group) {
+    throw new AppError("Study group not found", 404);
+  }
+
+  if (group.members.length === 0) {
+    throw new AppError("Join the study group to use chat", 403);
+  }
 }
 
 export async function findGroupOr404(groupId: string, currentUserId: string) {
@@ -158,6 +202,37 @@ export async function listMyGroups(currentUserId: string) {
 export async function listGroupMembers(groupId: string, currentUserId: string) {
   const group = await findGroupOr404(groupId, currentUserId);
   return group.members;
+}
+
+export async function listGroupMessages(currentUserId: string, groupId: string) {
+  await requireGroupMember(currentUserId, groupId);
+
+  const messages = await prisma.groupMessage.findMany({
+    where: { groupId },
+    orderBy: { createdAt: "asc" },
+    select: messageSelect,
+  });
+
+  return messages.map(formatMessage);
+}
+
+export async function createGroupMessage(
+  currentUserId: string,
+  groupId: string,
+  input: CreateGroupMessageInput,
+) {
+  await requireGroupMember(currentUserId, groupId);
+
+  const message = await prisma.groupMessage.create({
+    data: {
+      groupId,
+      authorId: currentUserId,
+      body: input.body,
+    },
+    select: messageSelect,
+  });
+
+  return formatMessage(message);
 }
 
 export async function createGroup(currentUserId: string, input: CreateGroupInput) {
