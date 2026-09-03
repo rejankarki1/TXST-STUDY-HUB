@@ -1,29 +1,32 @@
 import * as React from 'react'
 import { Link, NavLink, useNavigate } from 'react-router-dom'
-import { LogOut, Plus, User } from 'lucide-react'
+import { LogOut, Plus, Search, User } from 'lucide-react'
 import { Wordmark } from '@/components/Wordmark'
-import { NotificationBell } from '@/components/NotificationBell'
 import { Avatar } from '@/components/Avatar'
 import { AddCourseDialog } from '@/components/AddCourseDialog'
 import { Dialog, DialogTitle, SheetContent } from '@/components/ui/dialog'
 import { courseHref } from '@/lib/courses'
 import { cn, courseVars } from '@/lib/utils'
-import { useApp } from '@/state/AppState'
-import { useUnreadTotal } from '@/state/selectors'
-import { NAV_ITEMS } from './Sidebar'
+import { useAuth } from '@/state/AuthProvider'
+import { NAV_ITEMS } from './nav'
 
 /* -------------------------------------------------------------------------
-   Top header — brand, notifications, and the account sheet. Deliberately not
+   Top header — brand, course search, and the account sheet. Deliberately not
    a shrunken sidebar: on a phone the nav belongs under the thumb.
    ---------------------------------------------------------------------- */
-export function MobileHeader({ className }: { className?: string }) {
-  const { state, signOut } = useApp()
+export function MobileHeader({
+  className,
+  onOpenSearch,
+}: {
+  className?: string
+  onOpenSearch: () => void
+}) {
+  const { user, myCourses, signOut } = useAuth()
   const [open, setOpen] = React.useState(false)
   const [addOpen, setAddOpen] = React.useState(false)
   const navigate = useNavigate()
-  const courseDetailsByCode = Object.fromEntries(
-    state.profile.courseDetails.map((course) => [course.code, course]),
-  )
+
+  const name = user?.name ?? 'Student'
 
   const go = (path: string) => {
     setOpen(false)
@@ -37,12 +40,21 @@ export function MobileHeader({ className }: { className?: string }) {
         className,
       )}
     >
-      <Link to="/home" aria-label="TXST Study — Home">
+      <Link to="/home" aria-label="TXST Study Hub — Home">
         <Wordmark size="sm" />
       </Link>
 
       <div className="flex items-center gap-0.5">
-        <NotificationBell />
+        {/* The desktop header's ⌘K, reachable on touch. */}
+        <button
+          type="button"
+          onClick={onOpenSearch}
+          className="rounded-full p-2 text-muted-foreground transition-colors hover:bg-surface-hover hover:text-foreground"
+          aria-label="Search courses"
+        >
+          <Search className="size-5" />
+        </button>
+
         <Dialog open={open} onOpenChange={setOpen}>
           <button
             type="button"
@@ -50,27 +62,23 @@ export function MobileHeader({ className }: { className?: string }) {
             className="ml-1 rounded-full p-0.5 transition-colors hover:bg-surface-hover"
             aria-label="Account and courses"
           >
-            <Avatar person={{ name: state.profile.name }} size="sm" />
+            <Avatar person={{ name }} size="sm" />
           </button>
 
           <SheetContent side="right" aria-describedby={undefined}>
             <DialogTitle className="sr-only">Account</DialogTitle>
 
             <div className="flex items-center gap-3 border-b border-border p-5">
-              <Avatar person={{ name: state.profile.name }} size="lg" />
+              <Avatar person={{ name }} size="lg" />
               <div className="min-w-0">
-                <p className="truncate text-sm font-medium text-foreground">
-                  {state.profile.name}
-                </p>
+                <p className="truncate text-sm font-medium text-foreground">{name}</p>
                 <p className="truncate text-[13px] text-muted-foreground">
-                  {state.profile.major}
+                  {user?.major ?? 'Texas State'}
                 </p>
               </div>
             </div>
 
             <div className="min-h-0 flex-1 overflow-y-auto p-3">
-              {/* The sidebar is desktop-only, so this is the phone's only
-                  quick path to adding a course besides Profile. */}
               <div className="flex items-center justify-between px-3 pb-1 pt-2">
                 <h3 className="text-eyebrow text-faint-foreground">My courses</h3>
                 <button
@@ -85,26 +93,35 @@ export function MobileHeader({ className }: { className?: string }) {
                   <Plus className="size-4" />
                 </button>
               </div>
-              {state.profile.courses.map((code) => (
-                <button
-                  key={code}
-                  type="button"
-                  onClick={() => go(courseHref({ code }))}
-                  style={courseVars(code)}
-                  className="flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-surface-hover"
-                >
-                  <span
-                    className="size-2 shrink-0 rounded-full bg-(--course)"
-                    aria-hidden="true"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="block text-sm font-medium text-foreground">{code}</span>
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {courseDetailsByCode[code]?.title ?? code}
+
+              {myCourses.length === 0 ? (
+                <p className="px-3 py-4 text-[13px] text-muted-foreground">
+                  No courses yet. Add one to get started.
+                </p>
+              ) : (
+                myCourses.map((course) => (
+                  <button
+                    key={course.id}
+                    type="button"
+                    onClick={() => go(courseHref(course))}
+                    style={courseVars(course.code)}
+                    className="flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left transition-colors hover:bg-surface-hover"
+                  >
+                    <span
+                      className="size-2 shrink-0 rounded-full bg-(--course)"
+                      aria-hidden="true"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block text-sm font-medium text-foreground">
+                        {course.code}
+                      </span>
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {course.title}
+                      </span>
                     </span>
-                  </span>
-                </button>
-              ))}
+                  </button>
+                ))
+              )}
             </div>
 
             <div className="border-t border-border p-3">
@@ -120,8 +137,7 @@ export function MobileHeader({ className }: { className?: string }) {
                 type="button"
                 onClick={() => {
                   setOpen(false)
-                  signOut()
-                  navigate('/')
+                  void signOut().then(() => navigate('/'))
                 }}
                 className="flex min-h-11 w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm text-danger transition-colors hover:bg-danger-subtle"
               >
@@ -139,11 +155,10 @@ export function MobileHeader({ className }: { className?: string }) {
 }
 
 /* -------------------------------------------------------------------------
-   Bottom tab bar — four destinations, thumb height, safe-area aware.
+   Bottom tab bar — the same five destinations as the sidebar, thumb height,
+   safe-area aware.
    ---------------------------------------------------------------------- */
 export function MobileNav({ className }: { className?: string }) {
-  const unread = useUnreadTotal()
-
   return (
     <nav
       className={cn(
@@ -153,7 +168,7 @@ export function MobileNav({ className }: { className?: string }) {
       aria-label="Main"
     >
       <div className="flex">
-        {NAV_ITEMS.map(({ to, label, short, icon: Icon, showUnread }) => (
+        {NAV_ITEMS.map(({ to, label, short, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}
@@ -166,20 +181,16 @@ export function MobileNav({ className }: { className?: string }) {
           >
             {({ isActive }) => (
               <>
-                <span className="relative">
-                  <span
-                    className={cn(
-                      'flex size-8 items-center justify-center rounded-xl transition-colors',
-                      isActive && 'bg-primary-subtle',
-                    )}
-                  >
-                    <Icon className={cn('size-[21px]', isActive && 'stroke-[2.2]')} aria-hidden="true" />
-                  </span>
-                  {showUnread && unread > 0 && (
-                    <span className="absolute -right-1.5 -top-1 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[9px] font-semibold text-primary-foreground ring-2 ring-surface">
-                      {unread}
-                    </span>
+                <span
+                  className={cn(
+                    'flex size-8 items-center justify-center rounded-xl transition-colors',
+                    isActive && 'bg-primary-subtle',
                   )}
+                >
+                  <Icon
+                    className={cn('size-[21px]', isActive && 'stroke-[2.2]')}
+                    aria-hidden="true"
+                  />
                 </span>
                 {short ?? label}
               </>

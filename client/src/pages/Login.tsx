@@ -3,13 +3,15 @@ import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
-import { useApp } from '@/state/AppState'
+import { useAuth } from '@/state/AuthProvider'
+import { useDemoLogin } from '@/hooks/useDemoLogin'
 import { AuthLayout } from './auth/AuthLayout'
 
 type Errors = Partial<Record<'email' | 'password', string>>
 
 export default function Login() {
-  const { login, enterDemo } = useApp()
+  const { signIn } = useAuth()
+  const { enterDemo, pending: demoPending, available: demoAvailable } = useDemoLogin()
   const navigate = useNavigate()
   const [values, setValues] = React.useState({ email: '', password: '' })
   const [errors, setErrors] = React.useState<Errors>({})
@@ -29,7 +31,7 @@ export default function Login() {
 
     setSubmitting(true)
     try {
-      const user = await login({
+      const user = await signIn({
         email: values.email.trim(),
         password: values.password,
       })
@@ -45,7 +47,7 @@ export default function Login() {
   return (
     <AuthLayout
       title="Welcome back"
-      subtitle="Log in to see what your study groups are up to."
+      subtitle="Pick up where your courses left off."
       footer={
         <>
           New here?{' '}
@@ -77,7 +79,7 @@ export default function Login() {
           hint={
             <button
               type="button"
-              onClick={() => toast('Password reset isn’t part of this prototype')}
+              onClick={() => toast('Password reset is not part of this project yet.')}
               className="text-xs font-medium text-muted-foreground transition-colors hover:text-primary"
             >
               Forgot password?
@@ -101,18 +103,18 @@ export default function Login() {
         </Button>
       </form>
 
-      <p className="mt-5 text-center text-[13px] text-faint-foreground">
-        <button
-          type="button"
-          onClick={() => {
-            enterDemo()
-            navigate('/home')
-          }}
-          className="font-medium text-muted-foreground underline underline-offset-4 transition-colors hover:text-primary"
-        >
-          Skip to the demo
-        </button>
-      </p>
+      {demoAvailable && (
+        <p className="mt-5 text-center text-[13px] text-faint-foreground">
+          <button
+            type="button"
+            disabled={demoPending}
+            onClick={() => void enterDemo()}
+            className="font-medium text-muted-foreground underline underline-offset-4 transition-colors hover:text-primary disabled:opacity-60"
+          >
+            {demoPending ? 'Opening the demo…' : 'Explore the demo account'}
+          </button>
+        </p>
+      )}
     </AuthLayout>
   )
 }

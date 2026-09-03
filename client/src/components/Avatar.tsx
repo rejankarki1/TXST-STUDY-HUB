@@ -1,5 +1,8 @@
 import { cn, avatarTint, initials } from '@/lib/utils'
-import type { Person } from '@/data/types'
+
+/** Anything with a name can be rendered as an avatar — a student, an
+ *  organiser, a bare `{ name }` from a form. */
+type Named = { id?: string; name: string }
 
 const SIZES = {
   xs: 'size-6 text-[10px]',
@@ -18,7 +21,7 @@ export function Avatar({
   className,
   ring,
 }: {
-  person?: Pick<Person, 'name'> | null
+  person?: Pick<Named, 'name'> | null
   size?: Size
   className?: string
   /** Adds a background-coloured ring, for overlapping stacks. */
@@ -50,7 +53,7 @@ export function AvatarStack({
   label,
   total,
 }: {
-  people: Pick<Person, 'id' | 'name'>[]
+  people: Named[]
   max?: number
   size?: Size
   className?: string

@@ -11,7 +11,33 @@ services:
       - "5433:5432"
     volumes:
       - txst-study-hub-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U txst_user -d txst_study_hub"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # A separate database for the integration suite. The tests truncate every table
+  # between files, so they must never be pointed at the development database.
+  postgres-test:
+    image: postgres:16
+    container_name: txst-study-hub-db-test
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: txst_study_hub_test
+      POSTGRES_USER: txst_user
+      POSTGRES_PASSWORD: txst_password
+    ports:
+      - "5434:5432"
+    # tmpfs, not a volume: the test database is disposable by design and a fresh
+    # one on every container start is a feature.
+    tmpfs:
+      - /var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U txst_user -d txst_study_hub_test"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
 volumes:
   txst-study-hub-postgres-data:
-

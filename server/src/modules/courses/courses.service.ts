@@ -1,5 +1,6 @@
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../middleware/error.js";
+import { toPublicUser } from "../shared/publicUser.js";
 import { getCurrentUser } from "../auth/auth.service.js";
 import type { CreateCourseInput } from "./courses.schema.js";
 
@@ -59,6 +60,20 @@ export async function getCourse(courseId: string) {
   return course;
 }
 
+/** Throws 404 rather than returning null, for the many callers that only need the guard. */
+export async function requireCourse(courseId: string) {
+  const course = await prisma.course.findUnique({
+    where: { id: courseId },
+    select: { id: true, code: true, title: true },
+  });
+
+  if (!course) {
+    throw new AppError("Course not found", 404);
+  }
+
+  return course;
+}
+
 export async function createCourse(input: CreateCourseInput) {
   const { code, title, description, departmentId } = input;
 
@@ -68,9 +83,7 @@ export async function createCourse(input: CreateCourseInput) {
   });
 
   if (existing) {
-    throw new AppError("A course with that code already exists.", 409, {
-      course: existing,
-    });
+    throw new AppError("A course with that code already exists.", 409, { course: existing });
   }
 
   const department = await prisma.department.findUnique({
@@ -93,14 +106,7 @@ export async function createCourse(input: CreateCourseInput) {
 }
 
 export async function joinCourse(userId: string, courseId: string) {
-  const course = await prisma.course.findUnique({
-    where: { id: courseId },
-    select: { id: true },
-  });
-
-  if (!course) {
-    throw new AppError("Course not found", 404);
-  }
+  await requireCourse(courseId);
 
   await prisma.userCourse.upsert({
     where: { userId_courseId: { userId, courseId } },
@@ -112,9 +118,58 @@ export async function joinCourse(userId: string, courseId: string) {
 }
 
 export async function leaveCourse(userId: string, courseId: string) {
-  await prisma.userCourse.deleteMany({
-    where: { userId, courseId },
-  });
+  await prisma.userCourse.deleteMany({ where: { userId, courseId } });
 
   return getCurrentUser(userId);
+}
+
+/**
+ * The Course Hub People tab.
+ *
+ * Two rules make this safe to show to any classmate: only students who opted in
+ * with studyProfileVisible appear at all, and the selected fields carry nothing
+ * private — no email, no contact route, no way to message anyone. Coordination
+ * happens through Study Requests, which is why a name and a current intent is
+ * all this needs to return.
+ */
+export async function listCoursePeople(courseId: string, currentUserId: string) {
+  await requireCourse(courseId);
+
+  const enrolments = await prisma.userCourse.findMany({
+    where: {
+      courseId,
+      user: { studyProfileVisible: true, onboardingCompleted: true },
+    },
+    orderBy: { createdAt: "asc" },
+    select: {
+      createdAt: true,
+      user: {
+        select: {
+          id: true,
+          name: true,
+          major: true,
+          gradYear: true,
+          createdRequests: {
+            where: { courseId, status: "OPEN" },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { id: true, topic: true, intent: true },
+          },
+        },
+      },
+    },
+  });
+
+  return enrolments.map(({ user, createdAt }) => {
+    const openRequest = user.createdRequests[0];
+
+    return {
+      ...toPublicUser(user),
+      joinedCourseAt: createdAt.toISOString(),
+      isMe: user.id === currentUserId,
+      currentIntent: openRequest
+        ? { requestId: openRequest.id, topic: openRequest.topic, intent: openRequest.intent }
+        : null,
+    };
+  });
 }

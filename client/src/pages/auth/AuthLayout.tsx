@@ -2,13 +2,38 @@ import type * as React from 'react'
 import { Link } from 'react-router-dom'
 import { Wordmark } from '@/components/Wordmark'
 import { AvatarStack } from '@/components/Avatar'
-import { peopleById } from '@/data/people'
 import { courseVars } from '@/lib/utils'
 
+/* Illustrative only, and local to this file: the auth screens render before
+   there is a session, so nothing here can come from the API. */
 const COURSE_ROWS = [
-  { code: 'CS 2308', title: 'Foundations of Computer Science II', ids: ['p2', 'p3', 'p9', 'p7', 'p6'] },
-  { code: 'MATH 2472', title: 'Calculus II', ids: ['p5', 'p8', 'p11', 'p4'] },
-  { code: 'MATH 2358', title: 'Discrete Mathematics I', ids: ['p8', 'p5', 'p11'] },
+  {
+    code: 'CS 3358',
+    title: 'Data Structures and Algorithms',
+    people: [
+      { id: 'a', name: 'Maya Torres' },
+      { id: 'b', name: 'Priya Nair' },
+      { id: 'c', name: 'Andre Willis' },
+      { id: 'd', name: 'Jordan Reyes' },
+    ],
+  },
+  {
+    code: 'MATH 2358',
+    title: 'Discrete Mathematics',
+    people: [
+      { id: 'c', name: 'Andre Willis' },
+      { id: 'e', name: 'Sam Okafor' },
+      { id: 'a', name: 'Maya Torres' },
+    ],
+  },
+  {
+    code: 'ENG 1310',
+    title: 'College Writing I',
+    people: [
+      { id: 'd', name: 'Jordan Reyes' },
+      { id: 'e', name: 'Sam Okafor' },
+    ],
+  },
 ]
 
 /**
@@ -49,12 +74,12 @@ export function AuthLayout({
       <div className="hidden flex-col justify-center border-l border-border bg-[linear-gradient(135deg,var(--brand-wash),var(--background)_52%,var(--surface-sunken))] px-12 py-16 lg:flex xl:px-16">
         <div className="max-w-md">
           <h2 className="text-[28px] font-semibold leading-tight tracking-tight text-foreground">
-            You're not the only one
+            Someone else is stuck
             <br />
-            studying for this.
+            on the same thing.
           </h2>
           <p className="mt-3 text-[15px] leading-relaxed text-muted-foreground">
-            Students in your courses are already meeting up. Join them.
+            Post the topic you want to work on and find the classmates already looking for it.
           </p>
 
           <ul className="mt-9 divide-y divide-border overflow-hidden rounded-xl border border-border bg-surface/75 shadow-card">
@@ -73,7 +98,7 @@ export function AuthLayout({
                   <p className="truncate text-[13px] text-muted-foreground">{row.title}</p>
                 </div>
                 <AvatarStack
-                  people={row.ids.map((id) => peopleById[id])}
+                  people={row.people}
                   max={4}
                   size="sm"
                   className="[&_span]:ring-background"

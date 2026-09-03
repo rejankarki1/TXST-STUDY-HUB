@@ -1,8 +1,7 @@
 import * as React from 'react'
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
-import { Calendar, ChevronRight, Compass, Home, LogOut, Plus, User, Users } from 'lucide-react'
+import { LogOut, Plus, Search, User } from 'lucide-react'
 import { Wordmark } from '@/components/Wordmark'
-import { NotificationBell } from '@/components/NotificationBell'
 import { Avatar } from '@/components/Avatar'
 import {
   DropdownMenu,
@@ -11,34 +10,11 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import { courseHref } from '@/lib/courses'
-import { cn, courseVars, useStickyState } from '@/lib/utils'
 import { AddCourseDialog } from '@/components/AddCourseDialog'
-import { useApp } from '@/state/AppState'
-import { useMyCourseGroups } from '@/state/selectors'
-
-export type NavItem = {
-  to: string
-  label: string
-  /** Shorter label for the mobile tab bar. */
-  short?: string
-  icon: React.ComponentType<{ className?: string }>
-  showUnread?: boolean
-}
-
-export const NAV_ITEMS: NavItem[] = [
-  { to: '/home', label: 'Home', icon: Home },
-  { to: '/discover', label: 'Discover', icon: Compass },
-  { to: '/my-groups', label: 'My Groups', short: 'Groups', icon: Users, showUnread: true },
-  { to: '/sessions', label: 'Sessions', icon: Calendar },
-]
-
-/**
- * Desktop drops the My Groups tab: every joined group is one click away in the
- * course tree below, so a second flat list of the same groups is noise. The
- * /my-groups route and the mobile tab both stay.
- */
-export const DESKTOP_NAV_ITEMS = NAV_ITEMS.filter((item) => item.to !== '/my-groups')
+import { courseHref } from '@/lib/courses'
+import { cn, courseVars } from '@/lib/utils'
+import { useAuth } from '@/state/AuthProvider'
+import { NAV_ITEMS } from './nav'
 
 function navClass({ isActive }: { isActive: boolean }) {
   return cn(
@@ -53,41 +29,32 @@ function courseButtonClass(active: boolean) {
   return cn(
     'group flex w-full cursor-pointer items-center gap-2 rounded-lg border px-3 py-1.5 text-left text-[13px] transition-[transform,border-color,background-color,color,box-shadow] duration-150 active:translate-y-0 active:shadow-xs',
     active
-      ? 'border-primary-border bg-primary-subtle font-medium text-primary shadow-xs hover:border-primary-border hover:bg-primary-subtle'
+      ? 'border-primary-border bg-primary-subtle font-medium text-primary shadow-xs'
       : 'border-transparent text-muted-foreground hover:-translate-y-0.5 hover:border-border-strong hover:bg-surface-sunken hover:text-foreground hover:shadow-sm',
   )
 }
 
-/** A joined group, indented under its course. The rule makes the nesting read
- *  as containment rather than as a second flat list. */
-function groupClass({ isActive }: { isActive: boolean }) {
-  return cn(
-    'ml-3 truncate border-l border-border py-1.5 pl-4 pr-3 text-[13px] transition-colors',
-    isActive
-      ? 'border-primary font-medium text-primary'
-      : 'text-muted-foreground hover:border-border-strong hover:bg-surface-hover/70 hover:text-foreground',
-  )
-}
-
-export function Sidebar({ className }: { className?: string }) {
-  const { state, signOut, addCourse } = useApp()
-  const { courses, orphans } = useMyCourseGroups()
+/**
+ * Desktop chrome: the five destinations, then My Courses as a flat jump list.
+ *
+ * The old sidebar nested joined groups under each course, which made the tree
+ * the primary navigation. Courses are the primary object now, and everything
+ * inside one lives behind its Course Hub tabs — so this is a list, not a tree.
+ */
+export function Sidebar({
+  className,
+  onOpenSearch,
+}: {
+  className?: string
+  onOpenSearch: () => void
+}) {
+  const { user, myCourses, signOut } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
   const currentPath = location.pathname.replace(/\/+$/, '') || '/'
-  const nothingYet = courses.length === 0 && orphans.length === 0
   const [addOpen, setAddOpen] = React.useState(false)
 
-  /* Collapsed rather than expanded is what we persist, so a course added later
-     shows its groups by default instead of silently arriving folded shut. */
-  const [collapsed, setCollapsed] = useStickyState<string[]>('txst:sidebar:collapsed', [])
-
-  const isOpen = (courseId: string) => !collapsed.includes(courseId)
-
-  const toggle = (courseId: string) =>
-    setCollapsed((prev) =>
-      prev.includes(courseId) ? prev.filter((id) => id !== courseId) : [...prev, courseId],
-    )
+  const name = user?.name ?? 'Student'
 
   return (
     <aside
@@ -97,14 +64,27 @@ export function Sidebar({ className }: { className?: string }) {
       )}
     >
       <div className="flex h-16 shrink-0 items-center justify-between border-b border-border/70 pl-5 pr-3">
-        <Link to="/home" className="rounded-md" aria-label="TXST Study — Home">
+        <Link to="/home" className="rounded-md" aria-label="TXST Study Hub — Home">
           <Wordmark />
         </Link>
-        <NotificationBell />
+      </div>
+
+      <div className="px-3 pt-3">
+        <button
+          type="button"
+          onClick={onOpenSearch}
+          className="flex w-full items-center gap-2.5 rounded-lg border border-border bg-surface-sunken px-3 py-2 text-left text-[13px] text-muted-foreground transition-colors hover:border-border-strong hover:bg-surface-hover hover:text-foreground"
+        >
+          <Search className="size-4 shrink-0" aria-hidden="true" />
+          <span className="flex-1">Search courses</span>
+          <kbd className="rounded border border-border-strong bg-surface px-1.5 py-0.5 font-sans text-[10px] text-faint-foreground">
+            ⌘K
+          </kbd>
+        </button>
       </div>
 
       <nav className="flex flex-col gap-1 px-3 pt-3" aria-label="Main">
-        {DESKTOP_NAV_ITEMS.map(({ to, label, icon: Icon }) => (
+        {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
           <NavLink key={to} to={to} className={navClass}>
             <Icon className="size-[18px] shrink-0" aria-hidden="true" />
             <span className="flex-1">{label}</span>
@@ -130,7 +110,7 @@ export function Sidebar({ className }: { className?: string }) {
         </div>
 
         <div className="flex flex-col gap-0.5 overflow-y-auto scroll-slim pb-2">
-          {nothingYet ? (
+          {myCourses.length === 0 ? (
             <button
               type="button"
               onClick={() => setAddOpen(true)}
@@ -138,109 +118,20 @@ export function Sidebar({ className }: { className?: string }) {
             >
               Add a course
             </button>
-          ) : null}
-
-          {courses.map(({ course, groups }) => {
-            const open = isOpen(course.id)
-            const hasGroups = groups.length > 0
-            const groupListId = `sidebar-course-${course.id}-groups`
-            const active = currentPath === courseHref(course)
-            return (
-              <div key={course.id} className="flex flex-col">
-                <div style={courseVars(course.code)}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (hasGroups) toggle(course.id)
-                      navigate(courseHref(course))
-                    }}
-                    aria-expanded={hasGroups ? open : undefined}
-                    aria-controls={hasGroups ? groupListId : undefined}
-                    className={courseButtonClass(active)}
-                    title={course.title}
-                  >
-                    <span
-                      className="size-2 shrink-0 rounded-full bg-(--course)"
-                      aria-hidden="true"
-                    />
-                    <span className="min-w-0 flex-1 truncate">{course.code}</span>
-                    {hasGroups ? (
-                      <ChevronRight
-                        className={cn(
-                          'size-3.5 shrink-0 text-faint-foreground transition-transform duration-150',
-                          open && 'rotate-90',
-                          active && 'text-primary',
-                        )}
-                        aria-hidden="true"
-                      />
-                    ) : (
-                      <ChevronRight
-                        className="size-3.5 shrink-0 text-faint-foreground transition-transform duration-150 group-hover:translate-x-0.5"
-                        aria-hidden="true"
-                      />
-                    )}
-                  </button>
-                </div>
-                {/* No gap between rows: the left rule has to read as one
-                    continuous line of containment, not a dashed stack. */}
-                {open && groups.length > 0 && (
-                  <div id={groupListId} className="flex flex-col">
-                    {groups.map((group) => (
-                      <NavLink
-                        key={group.id}
-                        to={`/groups/${group.id}`}
-                        className={groupClass}
-                        title={group.name}
-                      >
-                        {group.name}
-                      </NavLink>
-                    ))}
-                  </div>
-                )}
+          ) : (
+            myCourses.map((course) => (
+              <div key={course.id} style={courseVars(course.code)}>
+                <button
+                  type="button"
+                  onClick={() => navigate(courseHref(course))}
+                  className={courseButtonClass(currentPath.startsWith(courseHref(course)))}
+                  title={course.title}
+                >
+                  <span className="size-2 shrink-0 rounded-full bg-(--course)" aria-hidden="true" />
+                  <span className="min-w-0 flex-1 truncate">{course.code}</span>
+                </button>
               </div>
-            )
-          })}
-
-          {orphans.length > 0 && (
-            <>
-              <h2 className="px-3 pb-1 pt-4 text-eyebrow text-faint-foreground">
-                Groups outside My Courses
-              </h2>
-              {/* Groups whose course you removed. Each bucket carries the fix:
-                  add the course back and it rejoins the tree above. */}
-              {orphans.map((bucket) => (
-                <div key={bucket.course?.id ?? bucket.courseCode} className="flex flex-col">
-                  <div className="flex items-center gap-1 pr-1">
-                    <span className="flex-1 truncate px-3 py-1.5 text-[13px] text-muted-foreground">
-                      {bucket.courseCode}
-                    </span>
-                    {bucket.course && (
-                      <button
-                        type="button"
-                        onClick={() => void addCourse(bucket.course!.id)}
-                        className="rounded-lg p-1 text-faint-foreground transition-colors hover:bg-primary-subtle hover:text-primary"
-                        aria-label={`Add ${bucket.courseCode} to My Courses`}
-                        title={`Add ${bucket.courseCode} to My Courses`}
-                      >
-                        <Plus className="size-3.5" />
-                      </button>
-                    )}
-                  </div>
-                  <div className="flex flex-col">
-                    {bucket.groups.map((group) => (
-                      <NavLink
-                        key={group.id}
-                        to={`/groups/${group.id}`}
-                        className={groupClass}
-                        title={group.name}
-                      >
-                        {group.name}
-                      </NavLink>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </>
+            ))
           )}
         </div>
       </div>
@@ -248,13 +139,11 @@ export function Sidebar({ className }: { className?: string }) {
       <div className="mt-auto border-t border-border bg-surface-raised/70 p-3">
         <DropdownMenu>
           <DropdownMenuTrigger className="flex w-full items-center gap-3 rounded-xl border border-transparent px-2 py-2 text-left transition-colors hover:border-border hover:bg-surface-hover data-[state=open]:border-border data-[state=open]:bg-surface-hover">
-            <Avatar person={{ name: state.profile.name }} size="md" />
+            <Avatar person={{ name }} size="md" />
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-foreground">
-                {state.profile.name}
-              </span>
+              <span className="block truncate text-sm font-medium text-foreground">{name}</span>
               <span className="block truncate text-xs text-muted-foreground">
-                {state.profile.major}
+                {user?.major ?? 'Texas State'}
               </span>
             </span>
           </DropdownMenuTrigger>
@@ -267,8 +156,7 @@ export function Sidebar({ className }: { className?: string }) {
             <DropdownMenuItem
               destructive
               onSelect={() => {
-                signOut()
-                navigate('/')
+                void signOut().then(() => navigate('/'))
               }}
             >
               <LogOut />

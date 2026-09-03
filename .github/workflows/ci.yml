@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, lint, test, build
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: txst_study_hub_test
+          POSTGRES_USER: txst_user
+          POSTGRES_PASSWORD: txst_password
+        ports:
+          - 5434:5432
+        options: >-
+          --health-cmd "pg_isready -U txst_user -d txst_study_hub_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      NODE_ENV: test
+      # The integration suite points DATABASE_URL at DATABASE_URL_TEST in its
+      # setup file; both are set so the guard against running destructive tests
+      # against a development database has something to compare.
+      DATABASE_URL: postgresql://txst_user:txst_password@localhost:5434/txst_study_hub_test?schema=public
+      DATABASE_URL_TEST: postgresql://txst_user:txst_password@localhost:5434/txst_study_hub_test?schema=public
+      JWT_ACCESS_SECRET: ci-secret-value-that-is-at-least-32-characters
+      CLIENT_URL: http://localhost:5173
+      CROSS_SITE_COOKIES: 'false'
+      ALLOWED_EMAIL_DOMAIN: txstate.edu
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            client/package-lock.json
+            server/package-lock.json
+
+      - name: Install dependencies
+        run: npm run install:all
+
+      - name: Generate Prisma client
+        run: npm --prefix server run db:generate
+
+      - name: Apply migrations to the test database
+        run: npm --prefix server run db:deploy
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      - name: Audit (production dependencies)
+        # Advisory only: the one outstanding finding is in the Prisma CLI, a dev
+        # dependency whose only fix is a major downgrade. See README.
+        run: npm --prefix server audit --omit=dev || true
+        continue-on-error: true

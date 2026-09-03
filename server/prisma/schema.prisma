@@ -13,12 +13,27 @@ enum UserRole {
   ADMIN
 }
 
-enum GroupPurpose {
+/// What a recurring Study Circle exists to do. Deliberately small — a Circle is
+/// a team with a standing purpose, not a taggable object.
+enum CirclePurpose {
   EXAM_PREP
   HOMEWORK
   WEEKLY_STUDYING
   PROJECT_WORK
   GENERAL_STUDY
+}
+
+enum CircleStatus {
+  ACTIVE
+  ARCHIVED
+}
+
+/// Membership rights inside one Study Circle. The creator holds OWNER; everyone
+/// who joins is a MEMBER. Anything finer grained is a permissions model, not a
+/// membership role.
+enum CircleRole {
+  OWNER
+  MEMBER
 }
 
 enum MeetingStyle {
@@ -27,9 +42,17 @@ enum MeetingStyle {
   FLEXIBLE
 }
 
+/// A scheduled session is one or the other. FLEXIBLE is a matching preference on
+/// a request, not something you can actually show up to.
 enum SessionMode {
   IN_PERSON
   ONLINE
+}
+
+enum SessionStatus {
+  PLANNED
+  COMPLETED
+  CANCELLED
 }
 
 enum SessionRsvpStatus {
@@ -38,43 +61,58 @@ enum SessionRsvpStatus {
   CANT
 }
 
-/// Membership rights inside one study group. The creator holds OWNER; everyone
-/// who joins is a MEMBER. Kept deliberately small — anything finer grained is a
-/// permissions model, not a membership role.
-enum GroupRole {
-  OWNER
-  MEMBER
+/// Why the student is posting. This is the field that makes matching work: a
+/// NEED_HELP and a CAN_HELP on the same topic are a pairing, two NEED_HELPs are
+/// a study group.
+enum StudyRequestIntent {
+  NEED_HELP
+  CAN_HELP
+  REVIEW_TOGETHER
 }
 
-enum NotificationKind {
-  SESSION
-  MESSAGE
-  REMINDER
-  MEMBER
+enum StudyRequestStatus {
+  OPEN
+  MATCHED
+  CONVERTED
+  CANCELLED
+  EXPIRED
+}
+
+enum QuestionStatus {
+  OPEN
+  SOLVED
 }
 
 model User {
-  id                    String             @id @default(uuid())
-  email                 String             @unique
-  name                  String?
-  passwordHash          String
-  role                  UserRole           @default(STUDENT)
-  avatarUrl             String?
-  bio                   String?
-  major                 String?
-  gradYear              Int?
-  onboardingCompleted   Boolean            @default(false)
-  selectedCourses       UserCourse[]
-  createdStudyGroups    StudyGroup[]       @relation("StudyGroupCreator")
-  studyGroupMemberships StudyGroupMember[]
-  organizedSessions     StudySession[]     @relation("SessionOrganizer")
-  sessionRsvps          SessionRsvp[]
-  groupMessages         GroupMessage[]
-  notifications         Notification[]     @relation("NotificationRecipient")
-  actedNotifications    Notification[]     @relation("NotificationActor")
-  refreshTokens         RefreshToken[]
-  createdAt             DateTime           @default(now())
-  updatedAt             DateTime           @updatedAt
+  id                  String   @id @default(uuid())
+  email               String   @unique
+  name                String?
+  passwordHash        String
+  role                UserRole @default(STUDENT)
+  avatarUrl           String?
+  bio                 String?
+  major               String?
+  gradYear            Int?
+  onboardingCompleted Boolean  @default(false)
+
+  /// Opt-in for the Course Hub People tab. Nothing about a student is listed to
+  /// classmates unless this is true.
+  studyProfileVisible Boolean @default(true)
+
+  selectedCourses     UserCourse[]
+  createdStudyCircles StudyCircle[]             @relation("StudyCircleCreator")
+  circleMemberships   StudyCircleMember[]
+  organizedSessions   StudySession[]            @relation("SessionOrganizer")
+  sessionRsvps        SessionRsvp[]
+  createdRequests     StudyRequest[]            @relation("StudyRequestCreator")
+  requestParticipants StudyRequestParticipant[]
+  questions           CourseQuestion[]          @relation("QuestionAuthor")
+  answers             CourseAnswer[]            @relation("AnswerAuthor")
+  refreshTokens       RefreshToken[]
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+
+  @@index([studyProfileVisible])
 }
 
 model Department {
@@ -87,16 +125,21 @@ model Department {
 }
 
 model Course {
-  id           String             @id @default(uuid())
-  code         String             @unique
-  title        String
-  description  String?
-  departmentId String?
-  department   Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  selectedBy   UserCourse[]
-  studyGroups  StudyGroup[]
-  createdAt    DateTime           @default(now())
-  updatedAt    DateTime           @updatedAt
+  id            String           @id @default(uuid())
+  code          String           @unique
+  title         String
+  description   String?
+  departmentId  String?
+  department    Department?      @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  selectedBy    UserCourse[]
+  studyCircles  StudyCircle[]
+  studyRequests StudyRequest[]
+  sessions      StudySession[]
+  questions     CourseQuestion[]
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  @@index([departmentId])
 }
 
 model UserCourse {
@@ -112,63 +155,160 @@ model UserCourse {
   @@index([courseId])
 }
 
-model StudyGroup {
-  id            String             @id @default(uuid())
-  name          String
-  description   String
-  purpose       GroupPurpose       @default(GENERAL_STUDY)
-  meetingStyle  MeetingStyle       @default(FLEXIBLE)
-  maxMembers    Int
-  courseId      String
-  creatorId     String
-  course        Course             @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  creator       User               @relation("StudyGroupCreator", fields: [creatorId], references: [id], onDelete: Cascade)
-  members       StudyGroupMember[]
-  sessions      StudySession[]
-  messages      GroupMessage[]
-  notifications Notification[]
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+/// A recurring study team inside one course. Renamed from StudyGroup: the
+/// product-facing object is a standing roster with a term and a purpose, not a
+/// chat room.
+model StudyCircle {
+  id                String              @id @default(uuid())
+  name              String
+  description       String
+  purpose           CirclePurpose       @default(GENERAL_STUDY)
+  meetingStyle      MeetingStyle        @default(FLEXIBLE)
+  maxMembers        Int
+  /// Free text ("Tuesdays 6pm, Alkek 4th floor") — a human cadence, not a
+  /// recurrence rule the server expands into sessions.
+  recurringSchedule String?
+  /// Optional group chat the members already use. Validated as a URL and kept
+  /// clearly secondary; the product does not host messaging.
+  externalLink      String?
+  term              String
+  status            CircleStatus        @default(ACTIVE)
+  courseId          String
+  creatorId         String
+  course            Course              @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  creator           User                @relation("StudyCircleCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  members           StudyCircleMember[]
+  sessions          StudySession[]
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
 
   @@index([courseId])
+  @@index([courseId, status])
   @@index([creatorId])
 }
 
-model StudyGroupMember {
-  id           String     @id @default(uuid())
-  studyGroupId String
-  userId       String
-  role         GroupRole  @default(MEMBER)
-  joinedAt     DateTime   @default(now())
-  lastReadAt   DateTime?
-  studyGroup   StudyGroup @relation(fields: [studyGroupId], references: [id], onDelete: Cascade)
-  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+model StudyCircleMember {
+  id       String      @id @default(uuid())
+  circleId String
+  userId   String
+  role     CircleRole  @default(MEMBER)
+  joinedAt DateTime    @default(now())
+  circle   StudyCircle @relation(fields: [circleId], references: [id], onDelete: Cascade)
+  user     User        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([studyGroupId, userId])
+  @@unique([circleId, userId])
   @@index([userId])
 }
 
-model StudySession {
-  id             String         @id @default(uuid())
-  groupId        String
-  organizerId    String
-  title          String
-  description    String
-  startsAt       DateTime
-  endsAt         DateTime
-  mode           SessionMode
-  location       String
-  locationDetail String?
-  meetingLink    String?
-  group          StudyGroup     @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  organizer      User           @relation("SessionOrganizer", fields: [organizerId], references: [id], onDelete: Cascade)
-  rsvps          SessionRsvp[]
-  notifications  Notification[]
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+/// An open ask for classmates to study one topic. The primary object students
+/// create; a session is what it becomes once a time is agreed.
+model StudyRequest {
+  id              String                    @id @default(uuid())
+  courseId        String
+  creatorId       String
+  topic           String
+  details         String?
+  intent          StudyRequestIntent
+  meetingStyle    MeetingStyle              @default(FLEXIBLE)
+  location        String?
+  maxParticipants Int
+  status          StudyRequestStatus        @default(OPEN)
+  expiresAt       DateTime?
+  course          Course                    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  creator         User                      @relation("StudyRequestCreator", fields: [creatorId], references: [id], onDelete: Cascade)
+  timeOptions     StudyRequestTimeOption[]
+  participants    StudyRequestParticipant[]
+  /// Set by convert-to-session. The unique side lives on StudySession, which is
+  /// what makes a second conversion impossible at the database level.
+  session         StudySession?
+  createdAt       DateTime                  @default(now())
+  updatedAt       DateTime                  @updatedAt
 
-  @@index([groupId])
+  @@index([courseId, status])
+  @@index([courseId, createdAt])
+  @@index([creatorId])
+  @@index([status, expiresAt])
+}
+
+/// One proposed window on a request. Between one and three per request, enforced
+/// in the service rather than the schema.
+model StudyRequestTimeOption {
+  id           String                     @id @default(uuid())
+  requestId    String
+  startsAt     DateTime
+  endsAt       DateTime
+  request      StudyRequest               @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  availability StudyRequestAvailability[]
+  createdAt    DateTime                   @default(now())
+
+  @@index([requestId])
   @@index([startsAt])
+}
+
+model StudyRequestParticipant {
+  id           String                     @id @default(uuid())
+  requestId    String
+  userId       String
+  joinedAt     DateTime                   @default(now())
+  request      StudyRequest               @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  user         User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  availability StudyRequestAvailability[]
+
+  @@unique([requestId, userId])
+  @@index([userId])
+}
+
+/// Which proposed windows one participant can actually make. The join table is
+/// the whole matching signal — without it a request is just a list of names.
+model StudyRequestAvailability {
+  id            String                  @id @default(uuid())
+  participantId String
+  timeOptionId  String
+  participant   StudyRequestParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+  timeOption    StudyRequestTimeOption  @relation(fields: [timeOptionId], references: [id], onDelete: Cascade)
+  createdAt     DateTime                @default(now())
+
+  @@unique([participantId, timeOptionId])
+  @@index([timeOptionId])
+}
+
+/// A real meeting. May come from a Study Request, belong to a Study Circle, or
+/// neither — courseId is the only required parent, which is what lets a request
+/// convert without forcing anyone to create a Circle first.
+model StudySession {
+  id              String        @id @default(uuid())
+  courseId        String
+  circleId        String?
+  studyRequestId  String?       @unique
+  organizerId     String
+  title           String
+  description     String
+  /// What the group plans to get through. Distinct from description: this is the
+  /// checklist the recap is written against.
+  agenda          String?
+  startsAt        DateTime
+  endsAt          DateTime
+  mode            SessionMode
+  location        String
+  locationDetail  String?
+  meetingLink     String?
+  status          SessionStatus @default(PLANNED)
+  /// Filled in by the organizer when completing the session.
+  topicsCompleted String?
+  recap           String?
+  course          Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  circle          StudyCircle?  @relation(fields: [circleId], references: [id], onDelete: SetNull)
+  studyRequest    StudyRequest? @relation(fields: [studyRequestId], references: [id], onDelete: SetNull)
+  organizer       User          @relation("SessionOrganizer", fields: [organizerId], references: [id], onDelete: Cascade)
+  rsvps           SessionRsvp[]
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([circleId])
+  @@index([courseId, startsAt])
+  @@index([startsAt])
+  @@index([status])
+  @@index([organizerId])
 }
 
 model SessionRsvp {
@@ -185,47 +325,55 @@ model SessionRsvp {
   @@index([userId])
 }
 
-model GroupMessage {
-  id        String     @id @default(uuid())
-  groupId   String
-  authorId  String
-  body      String
-  group     StudyGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  author    User       @relation(fields: [authorId], references: [id], onDelete: Cascade)
-  createdAt DateTime   @default(now())
-  /// Present so message editing can be added without another migration.
-  updatedAt DateTime   @updatedAt
+/// A reusable academic question, shared at the Course Hub level so the answer
+/// outlives the session or Circle that produced it.
+model CourseQuestion {
+  id               String         @id @default(uuid())
+  courseId         String
+  authorId         String
+  title            String
+  body             String
+  status           QuestionStatus @default(OPEN)
+  acceptedAnswerId String?        @unique
+  course           Course         @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  author           User           @relation("QuestionAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  answers          CourseAnswer[] @relation("QuestionAnswers")
+  acceptedAnswer   CourseAnswer?  @relation("AcceptedAnswer", fields: [acceptedAnswerId], references: [id], onDelete: SetNull)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
 
-  @@index([groupId, createdAt])
+  @@index([courseId, status])
+  @@index([courseId, createdAt])
+  @@index([authorId])
 }
 
-/// Read state is per-notification via readAt; no aggregate unread counter is
-/// stored, so "unread" is always derived from readAt IS NULL.
-model Notification {
-  id        String           @id @default(uuid())
-  userId    String
-  kind      NotificationKind
-  actorId   String?
-  groupId   String?
-  sessionId String?
-  title     String
-  message   String
-  readAt    DateTime?
-  createdAt DateTime         @default(now())
-  user      User             @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Cascade)
-  actor     User?            @relation("NotificationActor", fields: [actorId], references: [id], onDelete: SetNull)
-  group     StudyGroup?      @relation(fields: [groupId], references: [id], onDelete: Cascade)
-  session   StudySession?    @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+model CourseAnswer {
+  id          String          @id @default(uuid())
+  questionId  String
+  authorId    String
+  body        String
+  question    CourseQuestion  @relation("QuestionAnswers", fields: [questionId], references: [id], onDelete: Cascade)
+  author      User            @relation("AnswerAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  /// Back side of CourseQuestion.acceptedAnswer.
+  acceptedFor CourseQuestion? @relation("AcceptedAnswer")
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
 
-  @@index([userId, createdAt])
-  @@index([userId, readAt])
+  @@index([questionId])
+  @@index([authorId])
 }
 
 model RefreshToken {
-  id        String   @id @default(uuid())
-  tokenHash String   @unique
+  id        String    @id @default(uuid())
+  tokenHash String    @unique
   userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   expiresAt DateTime
-  createdAt DateTime @default(now())
+  /// Stamped instead of deleting the row on rotation, so a token presented by a
+  /// racing tab inside the grace window is honoured rather than treated as theft.
+  rotatedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
 }
