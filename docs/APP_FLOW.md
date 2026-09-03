@@ -1,246 +1,169 @@
-# TXST Study Hub — how the app works today
+# TXST Study Hub — how the app works
 
-A map of the current frontend flow and what it depends on, so a UI redesign can
-change how things look without breaking what already works.
+Companion to [`README.md`](../README.md) (setup, stack, scripts) and
+[`docs/API.md`](API.md) (endpoint reference). This document covers screens, routes,
+and the paths a user actually takes.
 
-Stack: React + React Router + Tailwind (client, port 5173) → Express + Prisma +
-Postgres (server, `/api`, port 5050).
+## 1. The product in one line
 
----
-
-## 1. The one thing to know first: two runtime modes
-
-Everything downstream branches on this.
-
-| | Real account | Demo mode |
-|---|---|---|
-| Entered by | Signup / Login | Landing → "Skip to demo" (`enterDemo()`) |
-| `state.accessToken` | JWT string | `null` |
-| `state.demoMode` | `false` | `true` |
-| Groups / sessions | fetched from API | seeded from `src/data/*.ts` |
-| Every action | hits the API | mutates local state only |
-
-Every action in `AppState.tsx` is written as:
-
-```ts
-if (stateRef.current.demoMode) { ...local mutation, toast, return }
-const token = stateRef.current.accessToken
-if (!token) throw new Error('Authentication required')
-...api call
-```
-
-**Rule for new UI:** if you add an action, it needs both branches, or demo mode
-breaks. If you add a feature with no backend, it must be demo-only or clearly
-non-functional for real users.
-
----
-
-## 2. Data flow (single direction)
+A student opens the hub for a course they are taking, says what they want to study, and
+gets matched with a classmate at a time they can both make.
 
 ```
-Page/component  →  useApp() action  →  lib/api.ts fetch  →  Express route
-                                                              ↓
-state (reducer) ←  dispatch(...)  ←  mapped ApiX → domain type
-     ↓
-selectors.ts hooks  →  components render
+Course Hub → Study Request → Study Session → optional Study Circle
+                                    ↑
+                          Course Questions attach to the Course Hub
 ```
 
-- **One global store**: `client/src/state/AppState.tsx` — `useReducer`, no React
-  Query, no per-page cache. `useApp()` gives `{ state, ...actions }`.
-- **No component fetches directly.** Pages call `refreshX()` actions in a mount
-  effect; the reducer holds the result.
-- **Derived data lives in `state/selectors.ts`** (`useMyGroups`, `useMySessions`,
-  `useGroup`, `useCourseStats`, …). Never re-derive in a page — use these, and
-  the redesign inherits every rule for free.
-- **API shape**: every response is `{ success, message?, data?, errors? }`.
-  `apiRequest` unwraps `data` and throws `ApiError { status, data }` otherwise.
+There is **one runtime mode**. Every screen is backed by the API; there is no client-only
+demo mode and no fixture data. The landing page's demo button performs a real login against
+a seeded account.
 
-State slices: `courses`, `departments`, `groups`, `sessions`, `profile`,
-`currentUser`, plus `messages` / `notifications` / `unread` (mock — see §6).
-Loading/error flags per slice: `coursesLoading`, `groupsError`, etc.
+## 2. Data flow
 
----
+Single direction, no global store:
+
+```
+page component
+  └─ use*.ts hook          fetch + mutate for that page, over useAsync
+       └─ lib/api/*.ts     typed request per feature
+            └─ client.ts   fetch, ApiError, single-flight refresh, 401 retry
+                 └─ /api
+```
+
+`state/AuthProvider.tsx` is the only context: session, current user, and enrolled courses —
+the things every screen needs. Everything else is page-scoped and refetched on mount, so no
+screen can render stale data it did not ask for.
+
+Hooks: `useAsync` (the primitive), `useHome`, `useCourse`, `useCourseOverview`,
+`useDemoLogin`.
 
 ## 3. Auth flow
 
-1. **App boot** (`AppProvider`, two mount effects):
-   - `GET /api/courses` → `courses` (public, runs even signed out).
-   - `POST /api/auth/refresh` using the httpOnly `refreshToken` cookie →
-     `AUTH_SUCCESS` (user + new access token) or `AUTH_FAILURE`.
-   - While this runs `authLoading: true` → `AppShell` renders `null`. That is the
-     blank flash on reload; a redesign can put a splash/skeleton there.
-2. **Gate** — `layouts/AppShell.tsx`:
-   - `authLoading` → nothing
-   - `!signedIn` → `/`
-   - `!onboarded` → `/onboarding`
-   - else → sidebar + `<Outlet/>`
-3. **Signup/Login** → `AUTH_SUCCESS` → navigate `/home` or `/onboarding` based on
-   `user.onboardingCompleted`.
-4. **Token handling**: access token lives in memory only (lost on reload,
-   recovered by `refresh`). Refresh token is an httpOnly cookie scoped to
-   `/api/auth`. All authed calls send `Authorization: Bearer <token>`.
-5. **There is no 401 retry.** An expired access token (15m) makes calls fail
-   until reload. Known gap, worth keeping in mind, not caused by the redesign.
-6. **Onboarding** (3 steps: major/grad year → pick courses → confirm) →
-   `POST /api/auth/onboarding` with `courseCodes`. Server **replaces** all
-   `UserCourse` rows with that set and flips `onboardingCompleted`.
+```
+signup / login ─► access token (15m, in memory)
+                  refresh token (httpOnly cookie, rotated on use)
+       │
+       ├─ request 401 ──► single-flight refresh ──► retry once ──► resolve
+       │                        │
+       │                        └─ fails ──► onSessionExpired ──► /login
+       └─ logout ──► revoke + clear cookie
+```
 
----
+The access token never touches `localStorage`. `AppShell` renders a branded splash while the
+session is resolving, so a reload never flashes the landing page at a signed-in user.
 
-## 4. Route map and what feeds each screen
+Signup is restricted to `@txstate.edu`. Rotation carries a 30-second grace window so
+concurrent tabs and StrictMode double-mounts do not sign the user out; see `docs/API.md`.
 
-Public: `/` Landing · `/signup` · `/login` · `/onboarding`
-App (inside `AppShell`):
+## 4. Route map
 
-| Route | Page | Loads on mount | Reads from state |
-|---|---|---|---|
-| `/home` | Home | `refreshSessions()` | `useMySessions().upcoming`, `useMyGroups()` |
-| `/discover` | Discover | nothing (uses boot data) | `state.courses` × `state.groups` |
-| `/my-groups` | MyGroups | `refreshMyGroups()` | `useMyCourseGroups()` (course→group tree) |
-| `/sessions` | SessionsPage | `refreshSessions()` | `useMySessions()` upcoming + past |
-| `/sessions/:sessionId` | SessionDetail | `refreshSession(id)` | `useSession`, `useGroup` |
-| `/courses/:slug` | CoursePage | `refreshCourseGroups(courseId)` | `useCourseStats(course)` |
-| `/groups/new` | CreateGroup | — | `state.courses`, `?courseId=` prefill |
-| `/groups/:groupId` | GroupLayout | `refreshGroup`, `refreshGroupSessions` | `useGroup` |
-| ↳ index | GroupOverview | — | next session, about, recent chat, members |
-| ↳ `/chat` | GroupChat | — | `useGroupMessages` (**mock**) |
-| ↳ `/sessions` | GroupSessions | — | `useGroupSessions` |
-| ↳ `/members` | GroupMembers | — | `membersOf(group)` |
-| `/groups/:groupId/sessions/new` | CreateSession | — | guards: must exist + be a member |
-| `/profile` | Profile | — | `useMyCourses()`, remove-course dialog |
+Public:
 
-Anything else → redirect `/`.
+| Route | Screen |
+|---|---|
+| `/` | Landing — pitch, 3 steps, feature panels, demo entry |
+| `/signup` · `/login` | Auth |
+| `/onboarding` | Name, major, grad year, first courses |
 
-**Slug note:** `/courses/:slug` is derived from the course code
-(`CS 2308` → `cs-2308`); there is no slug column. Course→group matching is by
-`courseId` with code as fallback (`lib/courses.ts:groupInCourse`). Keep using
-those helpers rather than comparing codes inline.
+Inside `AppShell` (nav: Home · Courses · Schedule · Create · Profile):
 
-**Chat is a layout special case:** `AppShell` and `GroupLayout` both check
-`useMatch('/groups/:id/chat')` and switch to a fixed-height, non-scrolling frame
-(mobile hides header + tab bar entirely). If you redesign the shell, preserve
-that branch or chat scrolling breaks.
+| Route | Screen | Feeds from |
+|---|---|---|
+| `/home` | Next session, open requests in my courses, my requests, my circles | `useHome` |
+| `/courses` | My courses + catalog search, add/remove | `courses.ts` |
+| `/courses/:slug` | Course Hub shell (tabs) | `useCourse` |
+| `/courses/:slug` (index) | Overview | `useCourseOverview` |
+| `/courses/:slug/study` | Open study requests | `studyRequests.ts` |
+| `/courses/:slug/questions` | Course Q&A | `questions.ts` |
+| `/courses/:slug/questions/:questionId` | One question with answers | `questions.ts` |
+| `/courses/:slug/people` | Classmates who opted in | `courses.ts` |
+| `/study-requests/new` | Post a request — topic, intent, style, time options | `studyRequests.ts` |
+| `/study-requests/:requestId` | Join, pick times, withdraw, edit, cancel, convert | `studyRequests.ts` |
+| `/schedule` | Date-grouped upcoming, organized, completed, cancelled | `sessions.ts` |
+| `/sessions/:sessionId` | Detail, RSVP, complete, cancel | `sessions.ts` |
+| `/create` | Three routes out: request, circle, session | — |
+| `/circles/new` · `/circles/:circleId` | Circle create and detail | `circles.ts` |
+| `/profile` | Profile and study-profile visibility toggle | `auth.ts` |
 
----
+Every route is `React.lazy` + `Suspense`, so the anonymous landing bundle does not carry the
+application.
 
-## 5. Feature flows that are real (backend-backed)
+### Legacy redirects
 
-**Create group** — `CreateGroup` → `createGroup()` → `POST /api/study-groups`.
-Server creates group + creator membership with role `OWNER`, **and auto-enrolls
-the creator in the course** (`UserCourse` upsert). Client then re-fetches
-`/auth/me` so My Courses updates, and navigates to `/groups/:id`.
+The product was refactored from study groups to courses and circles. Old deep links resolve
+rather than 404 (`App.tsx:64-73`):
 
-**Join group** — `joinGroup()` → `POST /api/study-groups/:id/join`. Server
-rejects 409 if already a member or full, otherwise adds membership **and
-auto-enrolls in the course**. Client upserts the group and re-fetches `/auth/me`.
+| From | To |
+|---|---|
+| `/discover` | `/courses` |
+| `/my-groups` | `/home` |
+| `/sessions` | `/schedule` |
+| `/groups/new` | `/create` |
+| `/groups/:groupId` (and `/chat`, `/members`) | the matching circle |
+| `/groups/:groupId/sessions[/new]` | that circle's sessions |
 
-**Leave group** — `DELETE /api/study-groups/:id/membership`. **The creator cannot
-leave (403)** — that is why the group menu shows "Delete group" for the creator
-and "Leave group" for everyone else. Course enrollment survives leaving.
+`/sessions/:sessionId` was never a group route and still resolves unchanged.
 
-**Delete group** — `DELETE /api/study-groups/:id`, creator only (403 otherwise).
-Confirmation dialog in `GroupLayout`; cascade removes sessions/messages.
+## 5. The core journey
 
-**Create session** — `POST /api/study-groups/:groupId/sessions`, **members only
-(403)**. Client sends `startsAt` + `durationMinutes`; `AppState` converts to
-`endsAt` before the call. Organizer is auto-RSVP'd `GOING`.
+```
+1. Add a course                  /courses          POST /courses/:id/join
+2. Open the hub                  /courses/:slug
+3. Post a request                /study-requests/new
+      topic · intent · meeting style · up to 3 time windows
+4. A classmate joins             POST /study-requests/:id/join
+5. Everyone marks availability   PUT  /study-requests/:id/availability
+6. Organizer picks the winning window and converts
+                                 POST /study-requests/:id/convert-to-session
+      └─ creates the session, RSVPs creator GOING and participants MAYBE,
+         sets the request to CONVERTED — in one transaction, idempotent
+7. Session appears on /schedule and /home; attendees RSVP
+8. Organizer completes it with a recap and topics covered
+9. What went unanswered becomes a Course Question, answered and accepted
+```
 
-**RSVP** — `PUT /api/sessions/:id/rsvp` with `going | maybe | cant`, members
-only. Response is the full updated session (counts + attendee list), so the UI
-just replaces it.
+**Intent is what makes a match.** `NEED_HELP`, `CAN_HELP`, and `REVIEW_TOGETHER` are the
+difference between two students who fit and two names in a list.
 
-**Courses (My Courses)** — `POST /api/me/courses` / `DELETE /api/me/courses/:id`,
-both return the full updated user. Add-course UI is one shared surface
-(`AddCourseDialog` → `AddCourse`), hosted by the sidebar, Profile, and the mobile
-account sheet.
+## 6. Sessions have two origins
 
-**Create a missing course** — only rendered as a zero-results empty state
-(`CreateMissingCourse`), deliberately not a standalone button. `POST /api/courses`.
-A 409 means the course already exists — the client **adopts the course from the
-409 body** instead of erroring. Client only ever sends `departmentId` (derived
-from the code prefix), never a new department.
+A session always belongs to a **course**. Beyond that it is either:
 
-**Orphan groups** — removing a course from My Courses keeps your group
-memberships. `buildCourseTree` puts those in an "outside My Courses" bucket on
-My Groups and the sidebar. Don't drop that section in a redesign; those groups
-would otherwise be unreachable from nav.
+- **converted from a study request** — `studyRequestId` set, `circleId` null, or
+- **scheduled by a circle** — `circleId` set, `studyRequestId` null.
 
----
+Reads are filtered by `canAccessSession`: organizer, RSVP holder, or circle member. For
+anyone else the `meetingLink` and attendee list are stripped from the payload.
 
-## 6. What is mock / has no backend yet
+## 7. Rules a redesign must not break
 
-These render from `client/src/data/*.ts` and **only in demo mode** — a real
-account sees them empty:
+- **Course is the container.** Requests, sessions, questions, and circles all hang off a
+  course. Nothing floats free.
+- **One runtime mode.** No fixture branch, no `demoMode`. If a surface is empty, it is
+  genuinely empty and needs an empty state.
+- **Access tokens stay in memory.** Never persist them.
+- **Conversion is idempotent.** Converting twice returns `409`, never a second session.
+- **Owners cannot leave their own circle** — they archive or delete it.
+- **`/courses/:slug` is the canonical course URL**, resolved by slug, not id.
+- **Design tokens are fixed**: primary `#7B1E28`, background `#FAF9F7`, surface `#FFFFFF`,
+  foreground `#1C1A19`, Inter Variable, Lucide icons, warm neutrals, subtle shadows.
+  Tailwind v4 is CSS-first — tokens live in `@theme inline` in `client/src/index.css`;
+  there is no `tailwind.config.*`.
+- **Course accent colours are hashed from the course code** via `courseVars()`, an 8-entry
+  palette that deliberately excludes maroon. Course is colour; maroon is chrome.
 
-- **Group chat** (`messages`, `replyTurn`, `typingIn`): `sendMessage()` appends
-  locally, then a scripted member reply fires on a timer (`data/replies.ts`).
-  Prisma has a `GroupMessage` model, but **no route exists**.
-- **Notifications** (`NotificationBell`, `markNotificationsRead`): seeded array;
-  `Notification` model exists, no route.
-- **Unread counts** (`state.unread`, group tab badge, sidebar badge): seeded
-  object; `StudyGroupMember.lastReadAt` exists in the schema, unused.
+## 8. Files that matter most
 
-The DB is ready for all three; the API is not. Design the UI for them, but treat
-anything you build here as non-functional for real accounts until routes exist.
-
-**Backend endpoints the client never calls** (built but unused):
-`/api/home`, `/api/experiences`, `/api/questions`, `/api/resources`, plus
-`GET /api/study-groups/:id/members`. Free to wire up if a new screen wants them.
-
----
-
-## 7. Backend contract (quick reference)
-
-Auth: `POST /auth/signup` · `POST /auth/login` · `POST /auth/refresh` ·
-`POST /auth/logout` · `POST /auth/onboarding` 🔒 · `GET /auth/me` 🔒
-Me: `POST /me/courses` 🔒 · `DELETE /me/courses/:courseId` 🔒
-Catalog: `GET /courses?search=` · `GET /courses/:id` · `POST /courses` 🔒 ·
-`GET /departments?search=`
-Groups 🔒: `GET /study-groups?courseId=&search=` · `POST /study-groups` ·
-`GET /study-groups/mine` · `GET /study-groups/:id` · `GET /study-groups/:id/members` ·
-`POST /study-groups/:id/join` · `DELETE /study-groups/:id/membership` ·
-`DELETE /study-groups/:id` · `GET /courses/:courseId/study-groups`
-Sessions 🔒: `GET /study-groups/:groupId/sessions` ·
-`POST /study-groups/:groupId/sessions` · `GET /sessions/mine` ·
-`GET /sessions/:id` · `PUT /sessions/:id/rsvp`
-
-🔒 = `requireAuth` (Bearer access token).
-
-**Enum translation happens at the boundary.** The API speaks UI strings
-(`'Exam prep'`, `'in-person'`, `'going'`); Prisma stores `EXAM_PREP`,
-`IN_PERSON`, `GOING`. Services do the mapping — the client never sees the
-SCREAMING_CASE forms. Keep sending the UI strings.
-
-**Server-computed fields on a group** — `memberCount`, `spotsLeft`, `isFull`,
-`isMember`, `isCreator`. On a session — `attendees[]`, `myRsvp`, `goingCount`,
-`maybeCount`, `cantCount`. Read these (via selectors); don't recompute in the UI.
-
----
-
-## 8. Rules a redesign must not break
-
-1. Every new action needs a **demo-mode branch** and a token check.
-2. Use **`state/selectors.ts`** for anything derived (membership, capacity, RSVP,
-   sorting, course tree). `isMember`/`isFull`/`spotsLeft` already fall back
-   correctly between API and demo shapes.
-3. Use **`lib/courses.ts`** for course↔group matching and hrefs — never compare
-   course codes inline.
-4. Keep the **creator vs member** distinction: creator gets Delete, member gets
-   Leave. Server enforces it; the UI must match or users hit a 403.
-5. Keep the **chat layout branch** in `AppShell` / `GroupLayout`.
-6. Keep the **orphan-groups** section reachable.
-7. Actions already toast on success/failure inside `AppState`. Pages just
-   `try/catch` and navigate — don't double-toast.
-8. Loading/error states are per-slice flags on `state`. New screens should read
-   them rather than inventing local ones.
-
-## 9. Files that matter most for the redesign
-
-- `client/src/App.tsx` — route table
-- `client/src/layouts/AppShell.tsx` · `Sidebar.tsx` · `MobileChrome.tsx` — chrome
-- `client/src/state/AppState.tsx` — store + every action (the contract)
-- `client/src/state/selectors.ts` — all derived data
-- `client/src/lib/api.ts` — every endpoint + response types
-- `client/src/components/primitives.tsx` · `rows.tsx` · `GroupCard.tsx` ·
-  `NextSessionCard.tsx` · `Avatar.tsx` — the shared visual vocabulary; swapping
-  these propagates a new look across every page at once
+| Concern | File |
+|---|---|
+| Routes | `client/src/App.tsx` |
+| Shell, nav, splash | `client/src/layouts/AppShell.tsx`, `Sidebar.tsx`, `MobileChrome.tsx` |
+| Session context | `client/src/state/AuthProvider.tsx` |
+| Fetch, refresh, retry | `client/src/lib/api/client.ts` |
+| Shared unions and labels | `client/src/lib/contracts.ts` |
+| Design system | `client/src/components/primitives.tsx`, `client/src/index.css` |
+| API surface | `server/src/routes/index.ts` → `server/src/modules/*/` |
+| Env contract | `server/src/config/env.ts` |
+| Conversion transaction | `server/src/modules/study-requests/study-requests.service.ts` |
+| Session privacy | `server/src/modules/sessions/sessions.service.ts` |

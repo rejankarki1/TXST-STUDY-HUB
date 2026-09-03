@@ -1,0 +1,36 @@
+{
+  "name": "txst-study-hub",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Course-centered study matching for Texas State students.",
+  "scripts": {
+    "install:all": "npm install && npm --prefix server install && npm --prefix client install",
+    "db:up": "docker compose up -d postgres postgres-test",
+    "db:down": "docker compose down",
+    "db:migrate": "npm --prefix server run db:migrate",
+    "db:deploy": "npm --prefix server run db:deploy",
+    "db:seed": "npm --prefix server run seed",
+    "setup": "npm run install:all && npm run db:up && npm run db:deploy && npm run db:seed",
+    "dev": "concurrently -n server,client -c magenta,cyan \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "typecheck": "npm run typecheck:server && npm run typecheck:client",
+    "typecheck:server": "npm --prefix server run typecheck",
+    "typecheck:client": "npm --prefix client run typecheck",
+    "lint": "oxlint client/src server/src server/prisma server/tests",
+    "test": "npm run test:server && npm run test:client",
+    "test:server": "npm --prefix server test",
+    "test:client": "npm --prefix client test",
+    "build": "npm run build:server && npm run build:client",
+    "build:server": "npm --prefix server run build",
+    "build:client": "npm --prefix client run build",
+    "verify": "npm run typecheck && npm run lint && npm run test && npm run build"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "oxlint": "^1.75.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

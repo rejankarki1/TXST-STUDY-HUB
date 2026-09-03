@@ -19,7 +19,7 @@ export const courseCodeSchema = z
 
 /**
  * departmentId is required: a student may add a missing course, but may not
- * invent a department. The prefix/department match is checked in the controller,
+ * invent a department. The prefix/department match is checked in the service,
  * where the department record is already loaded.
  */
 export const createCourseSchema = z.object({
@@ -31,7 +31,12 @@ export const createCourseSchema = z.object({
     .max(1000)
     .optional()
     .transform((value) => (value ? value : undefined)),
-  departmentId: z.string().uuid(),
+  departmentId: z.uuid(),
+});
+
+export const courseSearchSchema = z.object({
+  search: z.string().trim().max(120).optional(),
 });
 
 export type CreateCourseInput = z.infer<typeof createCourseSchema>;
+export type CourseSearchInput = z.infer<typeof courseSearchSchema>;

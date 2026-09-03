@@ -4,8 +4,7 @@ import type { ApiCourse } from '@/lib/api'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
 import { matchesCourseQuery } from '@/lib/courses'
-import { useApp } from '@/state/AppState'
-import { useMyCourses } from '@/state/selectors'
+import { useAuth } from '@/state/AuthProvider'
 
 /** Enough rows to browse, few enough to stay scannable as the catalog grows. */
 const MAX_RESULTS = 50
@@ -40,7 +39,7 @@ export function CreateMissingCourse({
   query: string
   onCreated: (course: ApiCourse) => void | Promise<void>
 }) {
-  const { state, createCourse, loadDepartments } = useApp()
+  const { departments, createCourse, loadDepartments } = useAuth()
   const [open, setOpen] = React.useState(false)
   const [code, setCode] = React.useState('')
   const [title, setTitle] = React.useState('')
@@ -49,7 +48,7 @@ export function CreateMissingCourse({
 
   React.useEffect(() => {
     if (open) void loadDepartments()
-  }, [open])
+  }, [open, loadDepartments])
 
   // Prefill from the search that came up empty, so the code is typed once.
   const openForm = () => {
@@ -64,9 +63,9 @@ export function CreateMissingCourse({
   const validCode = COURSE_CODE.test(normalized)
   const prefix = validCode ? normalized.split(' ')[0] : ''
   const department = prefix
-    ? state.departments.find((item) => item.code === prefix)
+    ? departments.find((item) => item.code === prefix)
     : undefined
-  const departmentMissing = validCode && state.departments.length > 0 && !department
+  const departmentMissing = validCode && departments.length > 0 && !department
   const canSubmit = validCode && Boolean(department) && title.trim().length >= 3 && !submitting
 
   const submit = async (event: React.FormEvent) => {
@@ -172,8 +171,7 @@ export function CreateMissingCourse({
  * reachable only when the course genuinely does not exist.
  */
 export function AddCourse({ onAdded }: { onAdded?: (course: ApiCourse) => void }) {
-  const { state, addCourse } = useApp()
-  const myCourses = useMyCourses()
+  const { courses, coursesLoading, coursesError, myCourses, addCourse } = useAuth()
   const [query, setQuery] = React.useState('')
   const [addingId, setAddingId] = React.useState<string | null>(null)
 
@@ -183,8 +181,8 @@ export function AddCourse({ onAdded }: { onAdded?: (course: ApiCourse) => void }
   )
 
   const matches = React.useMemo(
-    () => state.courses.filter((course) => matchesCourseQuery(course, query)),
-    [state.courses, query],
+    () => courses.filter((course) => matchesCourseQuery(course, query)),
+    [courses, query],
   )
   const results = matches.slice(0, MAX_RESULTS)
   const overflow = matches.length - results.length
@@ -217,10 +215,10 @@ export function AddCourse({ onAdded }: { onAdded?: (course: ApiCourse) => void }
       </div>
 
       <div className="-mx-1 mt-3 min-h-0 max-h-[min(24rem,50vh)] overflow-y-auto scroll-slim px-1">
-        {state.coursesLoading ? (
+        {coursesLoading ? (
           <p className="py-8 text-center text-sm text-muted-foreground">Loading courses...</p>
-        ) : state.coursesError ? (
-          <p className="py-8 text-center text-sm text-danger">{state.coursesError}</p>
+        ) : coursesError ? (
+          <p className="py-8 text-center text-sm text-danger">{coursesError}</p>
         ) : results.length ? (
           <div className="divide-y divide-border">
             {results.map((course) => {

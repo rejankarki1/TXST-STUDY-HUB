@@ -5,7 +5,8 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Field, Input } from '@/components/ui/input'
 import { cn } from '@/lib/utils'
-import { useApp } from '@/state/AppState'
+import { ApiError } from '@/lib/api'
+import { useAuth } from '@/state/AuthProvider'
 import { AuthLayout } from './auth/AuthLayout'
 
 type Errors = Partial<Record<'name' | 'email' | 'password' | 'confirm', string>>
@@ -40,7 +41,7 @@ function passwordIsStrong(value: string) {
 }
 
 export default function Signup() {
-  const { signup } = useApp()
+  const { signUp } = useAuth()
   const navigate = useNavigate()
   const [values, setValues] = React.useState({
     name: '',
@@ -70,7 +71,7 @@ export default function Signup() {
 
     setSubmitting(true)
     try {
-      const user = await signup({
+      const user = await signUp({
         name: values.name.trim(),
         email: values.email.trim(),
         password: values.password,
@@ -78,6 +79,16 @@ export default function Signup() {
 
       navigate(user.onboardingCompleted ? '/home' : '/onboarding')
     } catch (error) {
+      /* A field-level rejection belongs on the field, not in a toast the user
+         has to map back to an input themselves. */
+      if (error instanceof ApiError && error.errors) {
+        setErrors({
+          name: error.fieldError('name'),
+          email: error.fieldError('email'),
+          password: error.fieldError('password'),
+        })
+      }
+
       toast.error(error instanceof Error ? error.message : 'Signup failed')
     } finally {
       setSubmitting(false)

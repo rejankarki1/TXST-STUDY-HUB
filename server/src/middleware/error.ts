@@ -21,6 +21,16 @@ export class AppError extends Error {
   }
 }
 
+type BodyParserError = Error & { type: string; status?: number };
+
+function isBodyParserError(err: unknown): err is BodyParserError {
+  return (
+    err instanceof Error &&
+    typeof (err as BodyParserError).type === "string" &&
+    (err as BodyParserError).type.startsWith("entity.")
+  );
+}
+
 export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   if (err instanceof AppError) {
     res.status(err.status).json({
@@ -37,6 +47,20 @@ export const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
       success: false,
       message: "Invalid request data",
       errors: err.flatten().fieldErrors,
+    });
+    return;
+  }
+
+  /* express.json() rejects a body before any route sees it: unparseable JSON,
+     or one past the 100kb ceiling. Both are the caller's mistake, and reporting
+     them as 500 sends people hunting for a server fault that does not exist. */
+  if (isBodyParserError(err)) {
+    res.status(err.type === "entity.too.large" ? 413 : 400).json({
+      success: false,
+      message:
+        err.type === "entity.too.large"
+          ? "Request body is too large"
+          : "Request body is not valid JSON",
     });
     return;
   }

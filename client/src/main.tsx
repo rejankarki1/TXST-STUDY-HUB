@@ -3,13 +3,13 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { Toaster } from 'sonner'
 import App from './App'
-import { AppProvider } from '@/state/AppState'
+import { AuthProvider } from '@/state/AuthProvider'
 import './index.css'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <BrowserRouter>
-      <AppProvider>
+      <AuthProvider>
         <App />
         <Toaster
           position="bottom-right"
@@ -19,7 +19,7 @@ createRoot(document.getElementById('root')!).render(
               'rounded-lg! border! border-border! bg-surface! text-foreground! text-[13px]! shadow-md!',
           }}
         />
-      </AppProvider>
+      </AuthProvider>
     </BrowserRouter>
   </StrictMode>,
 )

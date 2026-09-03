@@ -4,6 +4,7 @@ import { AppError } from "../../middleware/error.js";
 import { currentUser } from "../../middleware/auth.js";
 import {
   getCurrentUser,
+  loginDemoUser,
   loginUser,
   logoutUser,
   refreshAuthSession,
@@ -15,7 +16,7 @@ import {
   refreshTokenCookieName,
   setRefreshTokenCookie,
 } from "../../utils/authCookies.js";
-import type { UpdateMeInput } from "./auth.schema.js";
+import type { LoginInput, SignupInput, UpdateMeInput } from "./auth.schema.js";
 
 /**
  * Credentials and tokens live in auth.service — hashing, comparison, signing,
@@ -24,29 +25,36 @@ import type { UpdateMeInput } from "./auth.schema.js";
  */
 
 export const signup: RequestHandler = async (req, res) => {
-  const { user, accessToken, refreshToken } = await signupUser(
-    req.body as { email: string; name?: string; password: string },
-  );
+  const { user, accessToken, refreshToken } = await signupUser(req.body as SignupInput);
 
   setRefreshTokenCookie(res, refreshToken);
 
   res.status(201).json({
     success: true,
-    message: "User created",
+    message: "Account created",
     data: { user, accessToken },
   });
 };
 
 export const login: RequestHandler = async (req, res) => {
-  const { user, accessToken, refreshToken } = await loginUser(
-    req.body as { email: string; password: string },
-  );
+  const { user, accessToken, refreshToken } = await loginUser(req.body as LoginInput);
 
   setRefreshTokenCookie(res, refreshToken);
 
   res.json({
     success: true,
     message: "Login successful",
+    data: { user, accessToken },
+  });
+};
+
+export const demo: RequestHandler = async (_req, res) => {
+  const { user, accessToken, refreshToken } = await loginDemoUser();
+
+  setRefreshTokenCookie(res, refreshToken);
+  res.json({
+    success: true,
+    message: "Demo session started",
     data: { user, accessToken },
   });
 };
@@ -79,7 +87,7 @@ export const logout: RequestHandler = async (req, res) => {
   await logoutUser(req.cookies?.[refreshTokenCookieName] as string | undefined);
   clearRefreshTokenCookie(res);
 
-  res.json({ success: true, message: "Logout successful" });
+  res.json({ success: true, message: "Logout successful", data: { loggedOut: true } });
 };
 
 export const me: RequestHandler = async (req, res) => {
@@ -92,17 +100,8 @@ export const me: RequestHandler = async (req, res) => {
   res.json({ success: true, data: { user } });
 };
 
-/**
- * PATCH /auth/me — profile update, and the step that completes onboarding.
- */
 export const updateMe: RequestHandler = async (req, res) => {
-  const { id } = currentUser(req);
-  const input = req.body as UpdateMeInput;
-  const user = await updateCurrentUser(id, input);
+  const user = await updateCurrentUser(currentUser(req).id, req.body as UpdateMeInput);
 
-  res.json({
-    success: true,
-    message: "Profile updated",
-    data: { user },
-  });
+  res.json({ success: true, message: "Profile updated", data: { user } });
 };

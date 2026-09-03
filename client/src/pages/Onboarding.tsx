@@ -1,6 +1,6 @@
 import * as React from 'react'
 import { Navigate, useNavigate } from 'react-router-dom'
-import { ArrowLeft, ArrowRight, Check, Search, Users, X } from 'lucide-react'
+import { ArrowLeft, ArrowRight, BookOpen, Check, Search, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Input, Label } from '@/components/ui/input'
@@ -12,11 +12,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Wordmark } from '@/components/Wordmark'
-import { Card, EmptyState } from '@/components/primitives'
-import { GroupCard } from '@/components/GroupCard'
+import { Card } from '@/components/primitives'
 import { CreateMissingCourse } from '@/components/AddCourse'
+import { BrandedSplash } from '@/layouts/AppShell'
+import { matchesCourseQuery } from '@/lib/courses'
 import { cn, courseVars, plural } from '@/lib/utils'
-import { useApp } from '@/state/AppState'
+import { useAuth } from '@/state/AuthProvider'
 
 const MAJORS = [
   'Computer Science',
@@ -31,10 +32,18 @@ const MAJORS = [
   'Undecided',
 ]
 
-const GRAD_YEARS = ['2026', '2027', '2028', '2029', '2030']
+const currentYear = new Date().getFullYear()
+const GRAD_YEARS = Array.from({ length: 7 }, (_, index) => String(currentYear + index))
 
+/**
+ * Three steps: who you are, what you're taking, confirm.
+ *
+ * Step two is the one that matters — every Study Request, Circle and question in
+ * the product hangs off a course, so an account with no courses has nothing to
+ * show. That is why the Continue button stays disabled until one is picked.
+ */
 export default function Onboarding() {
-  const { state, completeOnboarding } = useApp()
+  const { status, user, courses, coursesLoading, updateProfile } = useAuth()
   const navigate = useNavigate()
 
   const [step, setStep] = React.useState(0)
@@ -44,42 +53,29 @@ export default function Onboarding() {
   const [query, setQuery] = React.useState('')
   const [submitting, setSubmitting] = React.useState(false)
 
-  if (state.authLoading) return null
-  if (!state.signedIn) return <Navigate to="/signup" replace />
-  if (state.onboarded) return <Navigate to="/home" replace />
+  if (status === 'loading') return <BrandedSplash />
+  if (status === 'signedOut') return <Navigate to="/signup" replace />
+  if (user?.onboardingCompleted) return <Navigate to="/home" replace />
 
-  const firstName = state.profile.name.split(' ')[0]
-  const results = state.courses.filter((c) => {
-    const q = query.trim().toLowerCase()
-    if (!q) return true
-    return c.code.toLowerCase().includes(q) || c.title.toLowerCase().includes(q)
-  })
+  const firstName = (user?.name ?? '').split(' ')[0]
+  const results = courses.filter((course) => matchesCourseQuery(course, query))
 
   const toggle = (code: string) =>
     setSelected((prev) =>
-      prev.includes(code) ? prev.filter((c) => c !== code) : [...prev, code],
+      prev.includes(code) ? prev.filter((item) => item !== code) : [...prev, code],
     )
-
-  const groupCount = (code: string) => state.groups.filter((g) => g.courseCode === code).length
-  const matching = state.groups.filter((g) => selected.includes(g.courseCode))
-  const matchingGroups = matching.length
-  /* The busiest group across the picked courses — the most persuasive one. */
-  const previewGroup = [...matching].sort(
-    (a, b) => (b.memberCount ?? 0) - (a.memberCount ?? 0),
-  )[0]
 
   async function finish() {
     setSubmitting(true)
     try {
-      await completeOnboarding({
-        name: state.profile.name,
+      await updateProfile({
         major: major || 'Undecided',
-        gradYear: Number(gradYear) || 2029,
+        gradYear: Number(gradYear) || currentYear + 3,
         courseCodes: selected,
       })
       navigate('/home')
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : 'Could not complete onboarding')
+      toast.error(error instanceof Error ? error.message : 'Could not finish setting up')
     } finally {
       setSubmitting(false)
     }
@@ -92,14 +88,13 @@ export default function Onboarding() {
         <span className="text-[13px] text-muted-foreground">Step {step + 1} of 3</span>
       </header>
 
-      {/* progress */}
       <div className="flex gap-1.5 px-5 sm:px-8">
-        {[0, 1, 2].map((i) => (
+        {[0, 1, 2].map((index) => (
           <span
-            key={i}
+            key={index}
             className={cn(
               'h-[3px] flex-1 rounded-full transition-colors duration-300',
-              i <= step ? 'bg-primary' : 'bg-border',
+              index <= step ? 'bg-primary' : 'bg-border',
             )}
           />
         ))}
@@ -107,14 +102,13 @@ export default function Onboarding() {
 
       <main className="flex flex-1 justify-center px-5 py-10 sm:px-8 sm:py-14">
         <Card variant="raised" className="w-full max-w-xl p-6 sm:p-8">
-          {/* ------------------------------------------------ step 1 */}
           {step === 0 && (
             <div className="animate-rise">
               <h1 className="text-[26px] font-semibold tracking-tight text-foreground sm:text-3xl">
-                Welcome to TXST Study{firstName ? `, ${firstName}` : ''} 👋
+                Welcome{firstName ? `, ${firstName}` : ''} 👋
               </h1>
               <p className="mt-2 text-[15px] text-muted-foreground">
-                Let's set up your study space. This takes about a minute.
+                Two questions, then your courses. This takes about a minute.
               </p>
 
               <div className="mt-9 space-y-5">
@@ -125,9 +119,9 @@ export default function Onboarding() {
                       <SelectValue placeholder="Choose your major" />
                     </SelectTrigger>
                     <SelectContent>
-                      {MAJORS.map((m) => (
-                        <SelectItem key={m} value={m}>
-                          {m}
+                      {MAJORS.map((item) => (
+                        <SelectItem key={item} value={item}>
+                          {item}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -141,9 +135,9 @@ export default function Onboarding() {
                       <SelectValue placeholder="Choose a year" />
                     </SelectTrigger>
                     <SelectContent>
-                      {GRAD_YEARS.map((y) => (
-                        <SelectItem key={y} value={y}>
-                          {y}
+                      {GRAD_YEARS.map((year) => (
+                        <SelectItem key={year} value={year}>
+                          {year}
                         </SelectItem>
                       ))}
                     </SelectContent>
@@ -165,14 +159,14 @@ export default function Onboarding() {
             </div>
           )}
 
-          {/* ------------------------------------------------ step 2 */}
           {step === 1 && (
             <div className="animate-rise">
               <h1 className="text-[26px] font-semibold tracking-tight text-foreground sm:text-3xl">
                 What are you taking?
               </h1>
               <p className="mt-2 text-[15px] text-muted-foreground">
-                Pick the courses you want to find study groups in. You can change these later.
+                Each course gets its own hub — study requests, sessions, and questions all live
+                there. You can change these later.
               </p>
 
               <div className="relative mt-7">
@@ -181,123 +175,87 @@ export default function Onboarding() {
                   aria-hidden="true"
                 />
                 <Input
-                  id="course-search"
                   value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="Search your courses..."
-                  className="h-11 pl-11"
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Search by code or title…"
+                  className="pl-11"
                   aria-label="Search courses"
                 />
               </div>
 
               {selected.length > 0 && (
-                <div className="mt-4 flex flex-wrap gap-2">
+                <ul className="mt-4 flex flex-wrap gap-2">
                   {selected.map((code) => (
-                    <button
-                      key={code}
-                      type="button"
-                      onClick={() => toggle(code)}
-                      style={courseVars(code)}
-                      className="inline-flex items-center gap-1.5 rounded-full bg-(--course-subtle) py-1 pl-3 pr-2 text-[13px] font-semibold text-(--course) transition-opacity hover:opacity-80"
-                    >
-                      {code}
-                      <X className="size-3.5" aria-hidden="true" />
-                      <span className="sr-only">Remove {code}</span>
-                    </button>
+                    <li key={code}>
+                      <button
+                        type="button"
+                        onClick={() => toggle(code)}
+                        style={courseVars(code)}
+                        className="inline-flex items-center gap-1.5 rounded-full border border-primary-border bg-primary-subtle px-3 py-1 text-[13px] font-medium text-primary transition-colors hover:bg-primary-subtle-hover"
+                      >
+                        {code}
+                        <X className="size-3.5" aria-hidden="true" />
+                        <span className="sr-only">Remove {code}</span>
+                      </button>
+                    </li>
                   ))}
-                </div>
+                </ul>
               )}
 
-              <div className="mt-5 max-h-[22rem] space-y-2 overflow-y-auto scroll-slim pr-1">
-                {state.coursesLoading && (
-                  <p className="py-10 text-center text-sm text-muted-foreground">
-                    Loading courses...
+              <div className="-mx-1 mt-4 max-h-72 overflow-y-auto scroll-slim px-1">
+                {coursesLoading ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">
+                    Loading the catalog…
                   </p>
-                )}
-
-                {!state.coursesLoading && state.coursesError && (
-                  <p className="py-10 text-center text-sm text-danger">
-                    {state.coursesError}
-                  </p>
-                )}
-
-                {!state.coursesLoading && !state.coursesError && results.map((course) => {
-                  const on = selected.includes(course.code)
-                  const count = groupCount(course.code)
-                  return (
-                    <button
-                      key={course.code}
-                      type="button"
-                      onClick={() => toggle(course.code)}
-                      aria-pressed={on}
-                      className={cn(
-                        'flex w-full items-center gap-4 rounded-xl border px-4 py-3 text-left shadow-xs transition-[background-color,border-color,box-shadow,transform]',
-                        on
-                          ? 'border-primary bg-primary-subtle shadow-sm'
-                          : 'border-border bg-surface hover:-translate-y-0.5 hover:border-border-strong hover:bg-surface-hover hover:shadow-sm',
-                      )}
-                    >
-                      <span
-                        style={courseVars(course.code)}
-                        className="size-2.5 shrink-0 rounded-full bg-(--course)"
-                        aria-hidden="true"
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="block text-sm font-semibold text-foreground">
-                          {course.code}
-                        </span>
-                        <span className="block truncate text-[13px] text-muted-foreground">
-                          {course.title}
-                        </span>
-                        {count > 0 && (
-                          <span className="mt-0.5 block text-xs text-faint-foreground">
-                            {plural(count, 'study group')}
-                          </span>
-                        )}
-                      </span>
-                      <span
-                        className={cn(
-                          'flex size-5 shrink-0 items-center justify-center rounded-full border transition-colors',
-                          on
-                            ? 'border-primary bg-primary text-primary-foreground'
-                            : 'border-border-strong',
-                        )}
-                        aria-hidden="true"
-                      >
-                        {on && <Check className="size-3" strokeWidth={3} />}
-                      </span>
-                    </button>
-                  )
-                })}
-
-                {/* Without this, a student whose course isn't seeded cannot finish
-                    signing up at all — Continue stays disabled forever. */}
-                {!state.coursesLoading && !state.coursesError && results.length === 0 && (
-                  <div className="px-1">
-                    <CreateMissingCourse query={query} onCreated={(course) => toggle(course.code)} />
-                  </div>
+                ) : results.length > 0 ? (
+                  <ul className="divide-y divide-border">
+                    {results.slice(0, 40).map((course) => {
+                      const picked = selected.includes(course.code)
+                      return (
+                        <li key={course.id}>
+                          <button
+                            type="button"
+                            onClick={() => toggle(course.code)}
+                            aria-pressed={picked}
+                            className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left transition-colors hover:bg-surface-hover"
+                          >
+                            <span
+                              aria-hidden="true"
+                              className={cn(
+                                'flex size-5 shrink-0 items-center justify-center rounded-md border transition-colors',
+                                picked
+                                  ? 'border-primary bg-primary text-primary-foreground'
+                                  : 'border-border-strong bg-surface',
+                              )}
+                            >
+                              {picked && <Check className="size-3.5" />}
+                            </span>
+                            <span className="min-w-0 flex-1">
+                              <span className="block text-sm font-medium text-foreground">
+                                {course.code}
+                              </span>
+                              <span className="block truncate text-[13px] text-muted-foreground">
+                                {course.title}
+                              </span>
+                            </span>
+                          </button>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                ) : (
+                  <CreateMissingCourse
+                    query={query}
+                    onCreated={(course) => {
+                      toggle(course.code)
+                      setQuery('')
+                    }}
+                  />
                 )}
               </div>
 
-              {selected.length > 0 && (
-                <div className="mt-6">
-                  <h2 className="text-eyebrow text-faint-foreground">What's already happening</h2>
-                  {previewGroup ? (
-                    <GroupCard className="mt-3" group={previewGroup} />
-                  ) : (
-                    <EmptyState
-                      compact
-                      className="mt-3"
-                      icon={Users}
-                      title="No groups in your courses yet"
-                      description="You'd be the first — classmates can find and join what you start."
-                    />
-                  )}
-                </div>
-              )}
-
-              <div className="mt-8 flex items-center justify-between gap-3">
-                <Button variant="ghost" size="lg" onClick={() => setStep(0)}>
+              <div className="mt-8 flex items-center gap-2">
+                <Button variant="ghost" onClick={() => setStep(0)}>
                   <ArrowLeft />
                   Back
                 </Button>
@@ -307,61 +265,62 @@ export default function Onboarding() {
                   disabled={selected.length === 0}
                   onClick={() => setStep(2)}
                 >
-                  {selected.length > 0
-                    ? `Continue with ${selected.length}`
-                    : 'Pick at least one course'}
+                  Continue
                   <ArrowRight />
                 </Button>
               </div>
             </div>
           )}
 
-          {/* ------------------------------------------------ step 3 */}
           {step === 2 && (
-            <div className="animate-rise pt-4">
-              <span className="flex size-12 items-center justify-center rounded-full bg-success-subtle">
-                <Check className="size-6 text-success" strokeWidth={2.5} aria-hidden="true" />
-              </span>
-
-              <h1 className="mt-6 text-[26px] font-semibold tracking-tight text-foreground sm:text-3xl">
-                You're ready.
+            <div className="animate-rise">
+              <h1 className="text-[26px] font-semibold tracking-tight text-foreground sm:text-3xl">
+                You're set
               </h1>
               <p className="mt-2 text-[15px] text-muted-foreground">
-                We found {plural(matchingGroups, 'active study group')} across your courses.
+                {plural(selected.length, 'course hub')} ready. Open one and post what you want to
+                study — someone in the same class is looking for the same thing.
               </p>
 
-              <ul className="mt-8 divide-y divide-border border-y border-border">
+              <ul className="mt-7 space-y-2">
                 {selected.map((code) => {
-                  const course = state.courses.find((c) => c.code === code)
-                  const count = groupCount(code)
+                  const course = courses.find((item) => item.code === code)
                   return (
-                    <li key={code} className="flex items-center gap-3 py-3.5">
+                    <li
+                      key={code}
+                      style={courseVars(code)}
+                      className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3"
+                    >
                       <span
-                        style={courseVars(code)}
-                        className="size-2.5 shrink-0 rounded-full bg-(--course)"
+                        className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-(--course-subtle) text-(--course)"
                         aria-hidden="true"
-                      />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-foreground">{code}</p>
-                        <p className="truncate text-[13px] text-muted-foreground">
-                          {course?.title}
-                        </p>
-                      </div>
-                      <span className="shrink-0 text-[13px] text-muted-foreground">
-                        {plural(count, 'group')}
+                      >
+                        <BookOpen className="size-4" />
+                      </span>
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium text-foreground">{code}</span>
+                        <span className="block truncate text-[13px] text-muted-foreground">
+                          {course?.title ?? 'Course'}
+                        </span>
                       </span>
                     </li>
                   )
                 })}
               </ul>
 
-              <div className="mt-9 flex items-center gap-3">
-                <Button variant="primary" size="lg" onClick={finish} disabled={submitting}>
-                  {submitting ? 'Saving...' : 'Explore your dashboard'}
-                  <ArrowRight />
+              <div className="mt-8 flex items-center gap-2">
+                <Button variant="ghost" onClick={() => setStep(1)} disabled={submitting}>
+                  <ArrowLeft />
+                  Back
                 </Button>
-                <Button variant="ghost" size="lg" onClick={() => setStep(1)}>
-                  Edit courses
+                <Button
+                  variant="primary"
+                  size="lg"
+                  disabled={submitting}
+                  onClick={() => void finish()}
+                >
+                  {submitting ? 'Setting up…' : 'Go to my hub'}
+                  <ArrowRight />
                 </Button>
               </div>
             </div>

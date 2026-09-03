@@ -7,7 +7,7 @@ import {
   isYesterday,
   parseISO,
 } from 'date-fns'
-import type { MeetingStyle } from '@/data/types'
+import type { MeetingStyle } from '@/lib/contracts'
 
 export const toDate = (iso: string) => parseISO(iso)
 
@@ -53,25 +53,25 @@ export function relative(iso: string) {
   return `${formatDistanceToNowStrict(parseISO(iso), { addSuffix: false })} ago`
 }
 
-/** Date separators inside the chat transcript. */
-export function chatDayLabel(iso: string) {
-  const d = parseISO(iso)
-  if (isToday(d)) return 'Today'
-  if (isYesterday(d)) return 'Yesterday'
-  const days = Math.abs(Date.now() - d.getTime()) / 86_400_000
-  if (days < 7) return format(d, 'EEEE')
-  return format(d, 'MMMM d, yyyy')
-}
-
 export const sameDay = (a: string, b: string) => isSameDay(parseISO(a), parseISO(b))
 
 export const isPast = (iso: string) => parseISO(iso).getTime() < Date.now()
 
 /** The one place a stored meeting style becomes display text. */
 const MEETING_STYLE: Record<MeetingStyle, string> = {
-  'in-person': 'In person',
-  online: 'Online',
-  flexible: 'Flexible',
+  IN_PERSON: 'In person',
+  ONLINE: 'Online',
+  FLEXIBLE: 'Either works',
 }
 
 export const meetingStyleLabel = (style: MeetingStyle) => MEETING_STYLE[style]
+
+/** "2h", "90m" — how long a proposed window or session runs. */
+export function duration(startIso: string, endIso: string) {
+  const minutes = Math.round(
+    (parseISO(endIso).getTime() - parseISO(startIso).getTime()) / 60_000,
+  )
+  if (minutes < 60) return `${minutes}m`
+  const hours = minutes / 60
+  return Number.isInteger(hours) ? `${hours}h` : `${hours.toFixed(1)}h`
+}
